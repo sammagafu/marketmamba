@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: forexbot-db
+    environment:
+      POSTGRES_DB: forexbot
+      POSTGRES_USER: forexbot
+      POSTGRES_PASSWORD: forexbot_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forexbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forexbot-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forexbot-app
+    environment:
+      DATABASE_URL: "postgres://forexbot:forexbot_password_change_me@postgres:5432/forexbot?sslmode=disable"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS}
+      BROKER_PROVIDER: mock
+      MAX_RISK_PER_TRADE: 0.005
+      MAX_DAILY_LOSS: 0.02
+      MAX_OPEN_TRADES: 2
+      MAX_TRADES_PER_DAY: 10
+      APP_ENV: ${APP_ENV:-development}
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - forexbot-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  forexbot-network:
+    driver: bridge
