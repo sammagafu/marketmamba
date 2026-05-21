@@ -109,6 +109,12 @@ func (tb *TelegramBot) handleMessage(msg *tgbotapi.Message) {
 		tb.handleRisk(chatID, userID, parts[1:])
 	case "/dailyreport":
 		tb.handleDailyReport(chatID, userID)
+	case "/autostart":
+		tb.handleAutoStart(chatID, userID)
+	case "/autostop":
+		tb.handleAutoStop(chatID, userID)
+	case "/autostatus":
+		tb.handleAutoStatus(chatID, userID)
 	default:
 		tb.sendMessage(chatID, "❓ Unknown command. Use /start for help.")
 	}
@@ -117,19 +123,26 @@ func (tb *TelegramBot) handleMessage(msg *tgbotapi.Message) {
 func (tb *TelegramBot) handleStart(chatID int64) {
 	msg := `🤖 *Forex Scalping Bot*
 
-*Available Commands:*
-/status - Bot and trading status
-/balance - Account balance
-/positions - Open positions
+*Manual Trading:*
 /open <symbol> <type> <qty> <sl> <tp> - Open trade
 /close <positionID> - Close position
 /closeall - Close all positions
-/pause - Pause trading
+/pause - Pause all trading
 /resume - Resume trading
+
+*Automated Trading:*
+/autostart - Start automated trading
+/autostop - Stop automated trading
+/autostatus - Check automation status
+
+*Information:*
+/status - Bot and trading status
+/balance - Account balance
+/positions - Open positions
 /risk - View risk settings
 /dailyreport - Daily trading report
 
-*Example:*
+*Example Manual Trade:*
 /open EURUSD BUY 1.0 1.0900 1.1000
 
 ⚠️ *DISCLAIMER*: Forex trading carries high risk. Use this bot responsibly.`
@@ -342,6 +355,72 @@ Max Drawdown: %.2f%%`,
 		stats.WinRate,
 		stats.NetProfit,
 		stats.MaxDrawdown)
+
+	tb.sendMessage(chatID, msg)
+}
+
+func (tb *TelegramBot) handleAutoStart(chatID int64, userID int64) {
+	botState, err := tb.storage.GetBotState(userID)
+	if err != nil {
+		tb.sendMessage(chatID, "❌ Error fetching bot state")
+		return
+	}
+
+	if botState.AutoTradingActive {
+		tb.sendMessage(chatID, "⚠️ Automated trading is already active")
+		return
+	}
+
+	if botState.DailyLossHit {
+		tb.sendMessage(chatID, "❌ Cannot start: daily loss limit was hit. /resume to reset.")
+		return
+	}
+
+	if err := tb.storage.UpdateBotState(userID, false, true, false); err != nil {
+		tb.sendMessage(chatID, "❌ Failed to enable automation")
+		return
+	}
+
+	tb.sendMessage(chatID, "🤖 *Automated trading started*\n\nThe bot will now automatically:\n• Generate trading signals\n• Open trades when conditions align\n• Close positions at TP/SL\n• Respect risk management rules\n\nYou can still use /pause to pause manually.")
+	logger.Info("Automated trading started for user %d", userID)
+}
+
+func (tb *TelegramBot) handleAutoStop(chatID int64, userID int64) {
+	if err := tb.storage.UpdateBotState(userID, false, false, false); err != nil {
+		tb.sendMessage(chatID, "❌ Failed to disable automation")
+		return
+	}
+
+	tb.sendMessage(chatID, "⏹️ *Automated trading stopped*\n\nManual /open and /close commands still work.")
+	logger.Info("Automated trading stopped for user %d", userID)
+}
+
+func (tb *TelegramBot) handleAutoStatus(chatID int64, userID int64) {
+	botState, err := tb.storage.GetBotState(userID)
+	if err != nil {
+		tb.sendMessage(chatID, "❌ Error fetching bot state")
+		return
+	}
+
+	autoStatus := "❌ Disabled"
+	if botState.AutoTradingActive {
+		autoStatus = "✅ Enabled"
+	}
+
+	pauseStatus := "✅ Trading Active"
+	if botState.IsPaused {
+		pauseStatus = "⏸️ Trading Paused"
+	}
+
+	msg := fmt.Sprintf(`*Automation Status*
+Automated Trading: %s
+Trading Status: %s
+Daily Loss Hit: %v
+Last Active: %s`,
+		autoStatus,
+		pauseStatus,
+		botState.DailyLossHit,
+		botState.LastActiveAt.Format("2006-01-02 15:04:05"))
 
 	tb.sendMessage(chatID, msg)
 }

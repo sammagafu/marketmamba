@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"forex-bot/internal/broker"
@@ -13,6 +17,7 @@ import (
 	"forex-bot/internal/risk"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/telegram"
+	"forex-bot/internal/trading"
 	"forex-bot/internal/utils"
 )
 
@@ -79,11 +84,55 @@ func main() {
 	// Demo: Log some test data
 	logDemoInfo()
 
-	// Start bot
-	logger.Info("Starting Telegram bot polling...")
-	if err := tgBot.Start(); err != nil {
-		logger.Error("Bot error: %v", err)
-		log.Fatalf("Bot error: %v", err)
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Initialize trading services for the first allowed user (for testing)
+	if len(cfg.Telegram.AllowedUserIDs) > 0 {
+		primaryUserID := cfg.Telegram.AllowedUserIDs[0]
+
+		// Create trading executor
+		executor := trading.NewTradeExecutor(b, db, validator, primaryUserID)
+
+		// Create position monitor
+		posMonitor := trading.NewPositionMonitor(b, db, primaryUserID, 5*time.Second)
+		posMonitor.Start(ctx, executor)
+		logger.Info("Position monitor started for user %d", primaryUserID)
+
+		// Create signal generator and monitor
+		sigGen := trading.NewSignalGenerator("EURUSD", 0.7, cfg.Risk.RiskRewardRatio)
+		sigMonitor := trading.NewSignalMonitor(sigGen, executor, db, primaryUserID, 10*time.Second)
+		sigMonitor.Start(ctx)
+		logger.Info("Signal monitor started for user %d", primaryUserID)
+
+		// Run Telegram bot in goroutine
+		go func() {
+			if err := tgBot.Start(); err != nil {
+				logger.Error("Bot error: %v", err)
+			}
+		}()
+
+		// Wait for shutdown signal
+		<-sigChan
+		logger.Info("Shutdown signal received")
+
+		// Graceful shutdown
+		cancel()
+		posMonitor.Stop()
+		sigMonitor.Stop()
+
+		logger.Info("Shutdown complete")
+	} else {
+		// Start bot if no users configured
+		if err := tgBot.Start(); err != nil {
+			logger.Error("Bot error: %v", err)
+			log.Fatalf("Bot error: %v", err)
+		}
 	}
 }
 
