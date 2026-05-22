@@ -18,7 +18,7 @@ cd /home/sammy/marketmamba
 cp .env.example .env && nano .env          # or scp .env from Mac (see VPS_DEPLOY.md)
 docker compose -p marketmamba up -d --build
 docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/004_web_admins.sql
-docker compose -p marketmamba exec app ./server seed-admin
+docker compose -p marketmamba exec app ./seedadmin
 docker compose -p marketmamba logs -f app
 ```
 

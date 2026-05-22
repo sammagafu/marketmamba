@@ -21,8 +21,8 @@ for f in migrations/002_broker_connections.sql migrations/003_users_subscription
   docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < "$f" || true
 done
 
-echo "=== Seed admin (needs ADMIN_EMAIL in .env) ==="
-docker compose -p marketmamba exec app ./server seed-admin || true
+echo "=== Seed admin (uses seedadmin binary — do NOT run ./server inside container) ==="
+docker compose -p marketmamba exec app ./seedadmin || true
 
 echo "=== Status ==="
 docker compose -p marketmamba ps

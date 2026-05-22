@@ -99,7 +99,7 @@ bash scripts/vps-fix.sh
 ## 5. Create admin user (email + password)
 
 ```bash
-docker compose -p marketmamba exec app ./server seed-admin
+docker compose -p marketmamba exec app ./seedadmin
 ```
 
 You should see: `Web admin ready — log in with ADMIN_EMAIL on the dashboard`
@@ -155,7 +155,7 @@ docker compose -p marketmamba logs -f app
 docker compose -p marketmamba restart app
 
 # Re-seed admin after password change
-docker compose -p marketmamba exec app ./server seed-admin
+docker compose -p marketmamba exec app ./seedadmin
 
 # Shell into DB
 docker compose -p marketmamba exec postgres psql -U forexbot -d forexbot
@@ -188,7 +188,8 @@ After email admin login:
 | `relation "broker_connections" does not exist` | Run migration `002_broker_connections.sql` |
 | `Admins: []` in logs | Fix `.env`: `TELEGRAM_ADMIN_USER_IDS=5311857635`, restart app |
 | `WEB_API_KEY variable is not set` | Create `.env` in project folder, restart compose |
-| `getUpdates conflict` | Stop bot on Mac: `docker compose -p marketmamba down`; only one VPS container |
+| `getUpdates conflict` | Stop bot on Mac; never run `docker compose exec app ./server` (starts 2nd bot). Use `./seedadmin` only |
+| `bind :8090 already in use` | You started a second `./server` in the container; use `./seedadmin` for admin seed |
 | 502 from nginx | `docker compose -p marketmamba ps`, check port 8090 |
 | Email login fails | Run migration 004 + `seed-admin`; check `TELEGRAM_ADMIN_USER_IDS` |
 | Widget missing | BotFather Web Login allowed URLs, use HTTPS |

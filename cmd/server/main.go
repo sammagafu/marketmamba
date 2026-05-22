@@ -44,6 +44,16 @@ func main() {
 	}
 	logger.Info("Database connected successfully")
 
+	migrationsDir := os.Getenv("MIGRATIONS_DIR")
+	if migrationsDir == "" {
+		migrationsDir = "migrations"
+	}
+	if err := db.RunMigrations(migrationsDir); err != nil {
+		logger.Error("Database migrations: %v", err)
+	} else {
+		logger.Info("Database migrations applied")
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "seed-admin" {
 		if err := adminseed.Run(db); err != nil {
 			log.Fatalf("seed-admin: %v", err)
