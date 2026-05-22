@@ -81,7 +81,8 @@ func (s *Server) registerStatic() {
 		log.Printf("[web] index.html missing in embed — run: make web-build")
 		return
 	}
-	assetHandler := http.StripPrefix("/assets/", http.FileServer(http.FS(staticFS)))
+	// Vite emits dist/assets/*; URL /assets/foo maps to embed path assets/foo (no StripPrefix).
+	assetHandler := http.FileServer(http.FS(staticFS))
 	s.mux.HandleFunc("GET /{$}", spaHandler(staticFS, assetHandler))
 	log.Printf("[web] dashboard static files ready")
 }
@@ -111,7 +112,7 @@ func spaHandler(staticFS fs.FS, assets http.Handler) http.HandlerFunc {
 
 // serveSPA kept for tests / compatibility
 func serveSPA(staticFS fs.FS) http.HandlerFunc {
-	return spaHandler(staticFS, http.StripPrefix("/assets/", http.FileServer(http.FS(staticFS))))
+	return spaHandler(staticFS, http.FileServer(http.FS(staticFS)))
 }
 
 func serveFile(w http.ResponseWriter, fsys fs.FS, name string) {
