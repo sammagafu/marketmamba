@@ -26,7 +26,8 @@ func SaveConnection(store ConnectionStore, encryptionKey string, userID int64, p
 	if err := ValidateCredentials(provider, creds); err != nil {
 		return err
 	}
-	if _, err := NewFromProvider(provider, creds); err != nil {
+	b, err := NewFromProvider(provider, creds)
+	if err != nil {
 		return err
 	}
 	enc, err := secrets.EncryptJSON(encryptionKey, creds)
@@ -44,7 +45,12 @@ func SaveConnection(store ConnectionStore, encryptionKey string, userID int64, p
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
-	return store.UpsertBrokerConnection(conn)
+	if err := store.UpsertBrokerConnection(conn); err != nil {
+		return err
+	}
+	// Best-effort: row syncs on /balance, dashboard test, or first trade if broker is offline here.
+	_ = syncTradingAccount(store, userID, provider, b)
+	return nil
 }
 
 func defaultLabel(provider string, creds Credentials) string {

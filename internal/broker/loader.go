@@ -7,6 +7,23 @@ import (
 
 // ResolveBroker returns DB-configured broker or falls back to provider from env.
 func ResolveBroker(store *storage.PostgresStorage, userID int64, encryptionKey, envProvider string) (Broker, string, error) {
+	b, provider, err := resolveBroker(store, userID, encryptionKey, envProvider)
+	return b, provider, err
+}
+
+// ResolveBrokerAndSync also upserts the accounts table from broker balances.
+func ResolveBrokerAndSync(store *storage.PostgresStorage, userID int64, encryptionKey, envProvider string) (Broker, error) {
+	b, provider, err := resolveBroker(store, userID, encryptionKey, envProvider)
+	if err != nil {
+		return nil, err
+	}
+	if syncErr := syncTradingAccount(store, userID, provider, b); syncErr != nil {
+		return b, syncErr
+	}
+	return b, nil
+}
+
+func resolveBroker(store *storage.PostgresStorage, userID int64, encryptionKey, envProvider string) (Broker, string, error) {
 	conn, err := store.GetActiveBrokerConnection(userID)
 	if err != nil {
 		return nil, "", err

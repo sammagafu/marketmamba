@@ -39,7 +39,7 @@ AUTO_TRADE_REQUIRES_APPROVAL=true # production — admin /approveauto
 | **Mock (Demo)** | Testing auto-trade, risk limits, Telegram flow — no real money |
 | **Twelve Data** | Live prices for signals/sniper (`MARKET_DATA_API_KEY`) — not execution |
 | **OANDA** | Only if they accept your country of residence |
-| **MetaAPI + MT5** | Real trades via a broker you *can* open (Exness, IC Markets, etc.) — integration planned |
+| **MetaAPI + MT5** | Real trades via MT brokers (Deriv, Exness, IC Markets, etc.) — connect on dashboard |
 
 OANDA docs (if eligible): https://developer.oanda.com/rest-live-v20/introduction/
 

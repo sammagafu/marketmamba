@@ -129,10 +129,8 @@ func (c *Coordinator) ensureRunner(ctx context.Context, userID int64) {
 	if conn, connErr := c.store.GetActiveBrokerConnection(userID); connErr == nil && conn != nil {
 		provider = conn.Provider
 	}
-	if store := accounts.AccountStoreFrom(c.store); store != nil {
-		if syncErr := accounts.SyncFromBroker(store, userID, provider, b); syncErr != nil {
-			logger.Warn("Coordinator account sync user %d: %v", userID, syncErr)
-		}
+	if syncErr := accounts.SyncFromBroker(c.store, userID, provider, b); syncErr != nil {
+		logger.Warn("Coordinator account sync user %d: %v", userID, syncErr)
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	executor := NewTradeExecutor(b, c.store, c.validator, userID, c.outcomeNotifier)

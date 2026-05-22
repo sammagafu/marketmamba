@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"forex-bot/internal/accounts"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/storage"
 )
@@ -27,10 +26,10 @@ func (tb *TelegramBot) handleBroker(chatID, userID int64, args []string) {
 		tb.sendMessage(chatID, `*Broker connection*
 
 /broker — show current connection
-/broker connect — connect Mock (Demo) $10,000
-/broker connect mock — same as above
+/broker connect — Mock demo ($10,000)
+/broker connect mock — same
 
-Or use the web dashboard:
+*MetaAPI (Deriv, Exness, etc.)* — web dashboard only (first save may take 1–3 min while MT deploys):
 https://marketmamba.kkooapp.co.tz`)
 	}
 }
@@ -79,11 +78,7 @@ func (tb *TelegramBot) connectBroker(chatID, userID int64, provider string) {
 	}
 	b, err := tb.brokerFor(userID)
 	if err != nil {
-		tb.sendMessage(chatID, "✅ Saved, but could not load broker: "+err.Error())
-		return
-	}
-	if syncErr := accounts.SyncFromBroker(pg, userID, provider, b); syncErr != nil {
-		tb.sendMessage(chatID, "✅ Broker saved, but account sync failed: "+syncErr.Error())
+		tb.sendMessage(chatID, "✅ Saved, but account sync failed: "+err.Error())
 		return
 	}
 	bal, _ := b.GetBalance()

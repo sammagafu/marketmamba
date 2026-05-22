@@ -27,8 +27,13 @@ func (ps *PostgresStorage) RunMigrations(dir string) error {
 			return fmt.Errorf("read %s: %w", base, err)
 		}
 		if _, err := ps.db.Exec(string(body)); err != nil {
-			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "42P07" {
-				continue // relation already exists
+			if pqErr, ok := err.(*pq.Error); ok {
+				switch pqErr.Code {
+				case "42P07": // relation already exists
+					continue
+				case "42701": // duplicate column
+					continue
+				}
 			}
 			if strings.Contains(err.Error(), "already exists") {
 				continue

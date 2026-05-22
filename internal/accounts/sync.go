@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"forex-bot/internal/broker"
 	"forex-bot/internal/models"
 	"forex-bot/internal/utils"
 )
@@ -27,8 +26,14 @@ func IsNoRows(err error) bool {
 	return errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no rows")
 }
 
+// BrokerBalances supplies live balance/equity for account sync.
+type BrokerBalances interface {
+	GetBalance() (float64, error)
+	GetEquity() (float64, error)
+}
+
 // SyncFromBroker creates or updates the persisted account row from live broker balances.
-func SyncFromBroker(store AccountStore, userID int64, provider string, b broker.Broker) error {
+func SyncFromBroker(store AccountStore, userID int64, provider string, b BrokerBalances) error {
 	if store == nil || b == nil {
 		return fmt.Errorf("account sync: missing store or broker")
 	}

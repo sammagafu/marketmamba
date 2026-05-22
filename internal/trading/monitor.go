@@ -170,6 +170,8 @@ type SignalMonitor struct {
 	advisoryNotify     SniperNotifier
 	stopChan           chan struct{}
 	done               chan struct{}
+	lastTradeWarnMsg   string
+	lastTradeWarnAt    time.Time
 }
 
 func NewSignalMonitor(
@@ -264,11 +266,14 @@ func (sm *SignalMonitor) generateAndExecuteSignal() error {
 		sm.userID, signal.Symbol, signal.Type, signal.Strength, signal.StopLoss, signal.TakeProfit, signal.Reason,
 	)
 
-	// Execute the signal
+	if err := sm.readyForAutoTrade(); err != nil {
+		sm.logTradeBlocked(err)
+		return nil
+	}
 	pos, err := sm.executor.ExecuteSignal(signal)
 	if err != nil {
-		logger.Warn("[%s] Failed to execute %s for user %d: %v", signal.Symbol, signal.Type, sm.userID, err)
-		return nil // Don't return error; continue monitoring
+		sm.logTradeBlocked(err)
+		return nil
 	}
 	if pos != nil {
 		logger.Info(

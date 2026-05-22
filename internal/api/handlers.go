@@ -98,8 +98,9 @@ func (s *Server) saveBrokerConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if b, _, err := broker.ResolveBroker(s.storage, uid, s.cfg.App.BrokerEncryptionKey, s.cfg.Broker.Provider); err == nil {
-		_ = accounts.SyncFromBroker(s.storage, uid, req.Provider, b)
+	if _, err := broker.ResolveBrokerAndSync(s.storage, uid, s.cfg.App.BrokerEncryptionKey, s.cfg.Broker.Provider); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "saved", "provider": req.Provider})
 }
@@ -132,6 +133,11 @@ func (s *Server) handleBrokerTest(w http.ResponseWriter, r *http.Request) {
 	}
 	bal, err := b.GetBalance()
 	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	uid := userIDFrom(r)
+	if err := accounts.SyncFromBroker(s.storage, uid, req.Provider, b); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -174,8 +180,11 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	b, err := s.resolveBroker(uid)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "connect a broker first")
+		writeError(w, http.StatusBadRequest, "connect a broker first: "+err.Error())
 		return
+	}
+	if conn, _ := s.storage.GetActiveBrokerConnection(uid); conn != nil {
+		_ = accounts.SyncFromBroker(s.storage, uid, conn.Provider, b)
 	}
 	bal, _ := b.GetBalance()
 	eq, _ := b.GetEquity()

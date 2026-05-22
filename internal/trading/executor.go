@@ -40,6 +40,12 @@ func NewTradeExecutor(b broker.Broker, s storage.Storage, v *risk.RiskValidator,
 	return te
 }
 
+// ReadyForTrade ensures a persisted account row exists before execution.
+func (te *TradeExecutor) ReadyForTrade() error {
+	_, err := te.ensureAccount()
+	return err
+}
+
 // ExecuteSignal executes a trade signal with proper validation
 func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Position, error) {
 	logger.Info("Executing signal for user %d: %s %s", te.userID, signal.Symbol, signal.Type)
@@ -283,7 +289,7 @@ func (te *TradeExecutor) ensureAccount() (*models.Account, error) {
 		return nil, fmt.Errorf("failed to sync account: storage unavailable")
 	}
 	if syncErr := accounts.SyncFromBroker(acctStore, te.userID, provider, te.broker); syncErr != nil {
-		return nil, fmt.Errorf("failed to sync account: %w", syncErr)
+		return nil, fmt.Errorf("connect a broker on the dashboard or /broker connect, then retry: %w", syncErr)
 	}
 	account, err = te.storage.GetAccountByUser(te.userID)
 	if err != nil {

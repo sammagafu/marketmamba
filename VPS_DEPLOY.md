@@ -57,7 +57,7 @@ scp /Users/codexl-008/iloveprojects/forex-bot/.env \
 | `MARKET_DATA_API_KEY` | [Twelve Data](https://twelvedata.com/) API key (live FX quotes) |
 | `MAX_DAILY_LOSS` | e.g. `0.02` (2% of balance) — enforced by executor |
 
-**Live broker:** OANDA only works where they accept clients (not Tanzania and several other regions). If signup is blocked, use **Mock (Demo)** on the dashboard for automation testing, and **Twelve Data** (`MARKET_DATA_API_KEY`) for live quotes on signals/decisions. For real execution, use an **MT4/MT5 broker** in your country + **MetaAPI** (adapter `coming_soon` — ask to prioritize).
+**Live broker:** OANDA is not available in Tanzania and several regions. Use **Mock (Demo)** for automation testing, **Twelve Data** (`MARKET_DATA_API_KEY`) for live quotes, and **MetaAPI + MT5** on the dashboard for real execution (e.g. Deriv-Demo: login, password, server `Deriv-Demo`, token from [app.metaapi.cloud](https://app.metaapi.cloud)). First MetaAPI save can take **1–3 minutes** while the cloud account deploys. Telegram `/broker connect` only sets up Mock; use the web UI for MetaAPI.
 
 **Health / monitoring:**
 

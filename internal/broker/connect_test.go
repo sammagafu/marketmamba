@@ -1,13 +1,15 @@
 package broker
 
 import (
+	"database/sql"
 	"testing"
 
 	"forex-bot/internal/models"
 )
 
 type memConnStore struct {
-	conn *models.BrokerConnection
+	conn     *models.BrokerConnection
+	accounts map[int64]*models.Account
 }
 
 func (m *memConnStore) UpsertBrokerConnection(c *models.BrokerConnection) error {
@@ -20,6 +22,33 @@ func (m *memConnStore) GetActiveBrokerConnection(userID int64) (*models.BrokerCo
 		return m.conn, nil
 	}
 	return nil, nil
+}
+
+func (m *memConnStore) CreateAccount(a *models.Account) error {
+	if m.accounts == nil {
+		m.accounts = map[int64]*models.Account{}
+	}
+	m.accounts[a.UserID] = a
+	return nil
+}
+
+func (m *memConnStore) GetAccountByUser(userID int64) (*models.Account, error) {
+	if m.accounts == nil {
+		return nil, sql.ErrNoRows
+	}
+	a, ok := m.accounts[userID]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+	return a, nil
+}
+
+func (m *memConnStore) UpdateAccount(a *models.Account) error {
+	if m.accounts == nil {
+		m.accounts = map[int64]*models.Account{}
+	}
+	m.accounts[a.UserID] = a
+	return nil
 }
 
 func TestSaveConnectionMock(t *testing.T) {

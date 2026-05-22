@@ -43,9 +43,10 @@ func (sm *SignalMonitor) evaluateDecision(ctx context.Context) error {
 			marked = true
 		}
 		if botState.AutoTradingActive && sm.autoExecuteEnabled && sm.engine.AutoExecuteAllowed(d) && d.Signal != nil {
-			pos, execErr := sm.executor.ExecuteSignal(d.Signal)
-			if execErr != nil {
-				logger.Warn("[%s] Failed to execute %s for user %d: %v", d.Symbol, d.Signal.Type, sm.userID, execErr)
+			if err := sm.readyForAutoTrade(); err != nil {
+				sm.logTradeBlocked(err)
+			} else if pos, execErr := sm.executor.ExecuteSignal(d.Signal); execErr != nil {
+				sm.logTradeBlocked(execErr)
 			} else if pos != nil {
 				marked = true
 				logger.Info(
@@ -86,9 +87,13 @@ func (sm *SignalMonitor) generateAndExecuteSignalLegacy() error {
 		"Signal generated for user %d: %s %s | strength=%.2f SL=%.5f TP=%.5f | reason=%s",
 		sm.userID, signal.Symbol, signal.Type, signal.Strength, signal.StopLoss, signal.TakeProfit, signal.Reason,
 	)
+	if err := sm.readyForAutoTrade(); err != nil {
+		sm.logTradeBlocked(err)
+		return nil
+	}
 	pos, err := sm.executor.ExecuteSignal(signal)
 	if err != nil {
-		logger.Warn("[%s] Failed to execute %s for user %d: %v", signal.Symbol, signal.Type, sm.userID, err)
+		sm.logTradeBlocked(err)
 		return nil
 	}
 	if pos != nil {

@@ -68,8 +68,7 @@ func main() {
 	}
 
 	resolveBroker := func(userID int64) (broker.Broker, error) {
-		b, _, err := broker.ResolveBroker(db, userID, cfg.App.BrokerEncryptionKey, cfg.Broker.Provider)
-		return b, err
+		return broker.ResolveBrokerAndSync(db, userID, cfg.App.BrokerEncryptionKey, cfg.Broker.Provider)
 	}
 
 	subs := subscription.NewService(db, cfg)
