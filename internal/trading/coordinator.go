@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"forex-bot/internal/accounts"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
 	"forex-bot/internal/decision"
@@ -123,6 +124,15 @@ func (c *Coordinator) ensureRunner(ctx context.Context, userID int64) {
 	if err != nil {
 		logger.Error("Coordinator broker user %d: %v", userID, err)
 		return
+	}
+	provider := "mock"
+	if conn, connErr := c.store.GetActiveBrokerConnection(userID); connErr == nil && conn != nil {
+		provider = conn.Provider
+	}
+	if store := accounts.AccountStoreFrom(c.store); store != nil {
+		if syncErr := accounts.SyncFromBroker(store, userID, provider, b); syncErr != nil {
+			logger.Warn("Coordinator account sync user %d: %v", userID, syncErr)
+		}
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	executor := NewTradeExecutor(b, c.store, c.validator, userID, c.outcomeNotifier)

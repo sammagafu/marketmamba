@@ -1,8 +1,6 @@
 package trading
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -270,7 +268,7 @@ func (te *TradeExecutor) ensureAccount() (*models.Account, error) {
 	if err == nil {
 		return account, nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !accounts.IsNoRows(err) {
 		return nil, fmt.Errorf("failed to get account: %w", err)
 	}
 
@@ -280,7 +278,7 @@ func (te *TradeExecutor) ensureAccount() (*models.Account, error) {
 			provider = conn.Provider
 		}
 	}
-	acctStore := accountStore(te.storage)
+	acctStore := accounts.AccountStoreFrom(te.storage)
 	if acctStore == nil {
 		return nil, fmt.Errorf("failed to sync account: storage unavailable")
 	}
@@ -295,12 +293,6 @@ func (te *TradeExecutor) ensureAccount() (*models.Account, error) {
 	return account, nil
 }
 
-func accountStore(s storage.Storage) accounts.AccountStore {
-	if a, ok := s.(accounts.AccountStore); ok {
-		return a
-	}
-	return nil
-}
 
 func autoTradeSource(signal *models.TradeSignal) string {
 	if signal == nil || signal.Reason == "" {

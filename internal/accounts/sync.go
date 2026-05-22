@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"forex-bot/internal/broker"
@@ -16,6 +17,14 @@ type AccountStore interface {
 	CreateAccount(account *models.Account) error
 	GetAccountByUser(userID int64) (*models.Account, error)
 	UpdateAccount(account *models.Account) error
+}
+
+// IsNoRows reports whether err is a missing-row result from the database.
+func IsNoRows(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no rows")
 }
 
 // SyncFromBroker creates or updates the persisted account row from live broker balances.
@@ -38,10 +47,10 @@ func SyncFromBroker(store AccountStore, userID int64, provider string, b broker.
 
 	now := time.Now()
 	existing, err := store.GetAccountByUser(userID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !IsNoRows(err) {
 		return err
 	}
-	if errors.Is(err, sql.ErrNoRows) {
+	if IsNoRows(err) {
 		return store.CreateAccount(&models.Account{
 			ID:             utils.GenerateID("acc"),
 			UserID:         userID,
