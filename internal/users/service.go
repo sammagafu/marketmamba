@@ -5,19 +5,26 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
+	"forex-bot/internal/config"
 	"forex-bot/internal/models"
+	"forex-bot/internal/pairs"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
 	"forex-bot/internal/utils"
 )
 
 type Service struct {
-	store *storage.PostgresStorage
-	subs  *subscription.Service
+	store    *storage.PostgresStorage
+	subs     *subscription.Service
+	pairSvc  *pairs.Service
 }
 
-func NewService(store *storage.PostgresStorage, subs *subscription.Service) *Service {
-	return &Service{store: store, subs: subs}
+func NewService(store *storage.PostgresStorage, subs *subscription.Service, cfg *config.Config) *Service {
+	return &Service{
+		store:   store,
+		subs:    subs,
+		pairSvc: pairs.NewService(store, cfg),
+	}
 }
 
 func (s *Service) RegisterFromTelegram(from *tgbotapi.User) (*models.User, error) {
@@ -99,6 +106,11 @@ func (s *Service) ensureDefaults(userID int64) error {
 			UpdatedAt:       time.Now(),
 		}
 		if err := s.store.CreateRiskSettings(rs); err != nil {
+			return err
+		}
+	}
+	if has, _ := s.store.HasUserTradingPairs(userID); !has && s.pairSvc != nil {
+		if err := s.pairSvc.SeedDefaults(userID); err != nil {
 			return err
 		}
 	}

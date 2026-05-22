@@ -95,6 +95,7 @@ vps-migrate:
 	docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/002_broker_connections.sql
 	docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/003_users_subscriptions.sql
 	docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/004_web_admins.sql
+	docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/005_user_trading_pairs.sql
 
 vps-seed-admin:
 	docker compose -p marketmamba exec app ./server seed-admin

@@ -147,6 +147,8 @@ func (tb *TelegramBot) processMessage(msg *tgbotapi.Message) {
 		tb.handleRisk(chatID, userID, parts[1:])
 	case "/dailyreport":
 		tb.handleDailyReport(chatID, userID)
+	case "/pairs":
+		tb.handlePairs(chatID, userID, parts[1:])
 	case "/autostart":
 		tb.handleAutoStart(chatID, userID)
 	case "/autostop":
@@ -213,8 +215,10 @@ Welcome! Your Telegram ID: `+"`%d`"+`
 *Web dashboard:*
 https://marketmamba.kkooapp.co.tz
 
-*Signals:*
-Active subscribers receive trade alerts in this chat.
+*Signals & pairs:*
+/pairs — choose pairs for signals & auto-trade
+/pairs EURUSD BTCUSD — example
+Active subscribers receive alerts for *your* selected pairs.
 
 ⚠️ Forex trading is high risk.`, userID, planLine)
 	tb.sendMessage(chatID, msg)

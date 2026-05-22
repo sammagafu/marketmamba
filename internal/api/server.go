@@ -9,6 +9,7 @@ import (
 
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/pairs"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
@@ -29,10 +30,11 @@ type Server struct {
 	resolveBroker    BrokerResolver
 	signalNotifier   signals.Notifier
 	riskValidator    *risk.RiskValidator
+	pairSvc          *pairs.Service
 	mux              *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator) *Server {
+func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator, pairSvc *pairs.Service) *Server {
 	s := &Server{
 		cfg:              cfg,
 		storage:          store,
@@ -41,6 +43,7 @@ func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscri
 		resolveBroker:    resolve,
 		signalNotifier:   notifier,
 		riskValidator:    validator,
+		pairSvc:          pairSvc,
 		mux:              http.NewServeMux(),
 	}
 	s.routes()
@@ -63,6 +66,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/positions", s.withUser(s.handlePositions))
 	s.mux.HandleFunc("/api/v1/trades", s.withUser(s.handleTrades))
 	s.mux.HandleFunc("/api/v1/subscription", s.withUser(s.handleSubscription))
+	s.mux.HandleFunc("/api/v1/trading-pairs", s.withUser(s.handleTradingPairs))
 	s.mux.HandleFunc("/api/v1/admin/stats", s.withAdmin(s.handleAdminStats))
 	s.mux.HandleFunc("/api/v1/admin/trades", s.withAdmin(s.handleAdminTrades))
 	s.mux.HandleFunc("/api/v1/admin/users", s.withAdmin(s.handleAdminUsers))
@@ -72,6 +76,17 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/admin/signals/broadcast", s.withAdmin(s.handleAdminBroadcastSignal))
 
 	s.registerStatic()
+}
+
+func (s *Server) handleTradingPairs(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleTradingPairsGet(w, r)
+	case http.MethodPut:
+		s.handleTradingPairsPut(w, r)
+	default:
+		methodNotAllowed(w)
+	}
 }
 
 func (s *Server) registerStatic() {

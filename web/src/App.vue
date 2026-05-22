@@ -8,6 +8,7 @@ import EmailAdminLogin from './components/EmailAdminLogin.vue'
 import LandingHero from './components/LandingHero.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import BrandLogo from './components/BrandLogo.vue'
+import TradingPairs from './components/TradingPairs.vue'
 import AppFooter from './components/AppFooter.vue'
 
 const loggedIn = ref(false)
@@ -378,6 +379,11 @@ onMounted(async () => {
       </template>
       <p v-else class="muted">Connect Mock broker below</p>
     </section>
+
+    <TradingPairs
+      :can-trade="canTrade && !isBlocked"
+      @message="(m) => { message = m.text; messageOk = m.ok }"
+    />
 
     <section class="card card-win">
       <h2>Subscription</h2>

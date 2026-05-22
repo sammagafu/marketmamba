@@ -17,6 +17,7 @@ import (
 	"forex-bot/internal/feedback"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
+	"forex-bot/internal/pairs"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
@@ -70,7 +71,8 @@ func main() {
 	}
 
 	subs := subscription.NewService(db, cfg)
-	usersSvc := users.NewService(db, subs)
+	pairSvc := pairs.NewService(db, cfg)
+	usersSvc := users.NewService(db, subs, cfg)
 
 	validator := risk.NewRiskValidator(&models.RiskSettings{
 		MaxRiskPerTrade: cfg.Risk.MaxRiskPerTrade,
@@ -91,7 +93,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker, outcomeSvc)
+	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker, outcomeSvc, pairSvc)
 	coordinator.Start(ctx)
 
 	if cfg.App.SignalBroadcastEnabled {
@@ -104,7 +106,7 @@ func main() {
 	}
 
 	if cfg.App.EnableWeb {
-		apiServer := api.NewServer(cfg, db, subs, usersSvc, resolveBroker, tgBot, validator)
+		apiServer := api.NewServer(cfg, db, subs, usersSvc, resolveBroker, tgBot, validator, pairSvc)
 		go func() {
 			addr := ":" + cfg.App.HTTPPort
 			logger.Info("Web dashboard listening on %s", addr)

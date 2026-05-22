@@ -10,6 +10,7 @@ import (
 	"forex-bot/internal/logger"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/feedback"
+	"forex-bot/internal/pairs"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
 )
@@ -28,6 +29,7 @@ type Coordinator struct {
 	subs            *subscription.Service
 	validator       *risk.RiskValidator
 	outcomeNotifier feedback.OutcomeNotifier
+	pairSvc         *pairs.Service
 	resolve         BrokerResolver
 	mu              sync.Mutex
 	runners         map[int64]*userRunner
@@ -41,6 +43,7 @@ func NewCoordinator(
 	v *risk.RiskValidator,
 	resolve BrokerResolver,
 	outcomeNotifier feedback.OutcomeNotifier,
+	pairSvc *pairs.Service,
 ) *Coordinator {
 	return &Coordinator{
 		store:           store,
@@ -48,6 +51,7 @@ func NewCoordinator(
 		subs:            subs,
 		validator:       v,
 		outcomeNotifier: outcomeNotifier,
+		pairSvc:         pairSvc,
 		resolve:         resolve,
 		runners:         make(map[int64]*userRunner),
 		interval:        15 * time.Second,
@@ -116,7 +120,13 @@ func (c *Coordinator) ensureRunner(ctx context.Context, userID int64) {
 	runCtx, cancel := context.WithCancel(ctx)
 	executor := NewTradeExecutor(b, c.store, c.validator, userID, c.outcomeNotifier)
 	posMonitor := NewPositionMonitor(b, c.store, userID, 5*time.Second)
-	sigMonitor := NewSignalMonitor(c.cfg.SignalSymbols(), c.cfg.Risk.RiskRewardRatio, executor, c.store, userID, 10*time.Second)
+	symbols := c.cfg.SignalSymbols()
+	if c.pairSvc != nil {
+		if userSyms, err := c.pairSvc.AutoTradeSymbols(userID); err == nil && len(userSyms) > 0 {
+			symbols = userSyms
+		}
+	}
+	sigMonitor := NewSignalMonitor(symbols, c.cfg.Risk.RiskRewardRatio, executor, c.store, userID, 10*time.Second)
 	posMonitor.Start(runCtx, executor)
 	sigMonitor.Start(runCtx)
 

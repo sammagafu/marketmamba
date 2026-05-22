@@ -44,7 +44,7 @@ func Broadcast(store *storage.PostgresStorage, subs *subscription.Service, notif
 	if signal == nil || notifier == nil {
 		return 0, nil
 	}
-	ids, err := store.ListSignalSubscriberTelegramIDs()
+	ids, err := store.ListSignalSubscriberTelegramIDsForSymbol(signal.Symbol)
 	if err != nil {
 		return 0, err
 	}

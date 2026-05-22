@@ -95,7 +95,7 @@ export const SIGNAL_SOURCES = [
   {
     title: 'Qualified Telegram signals',
     body:
-      'Admins can broadcast setups on EURUSD, BTCUSD, and more. Subscribers get TP/SL outcome updates when those levels hit.',
+      'Pick your pairs (EURUSD, BTCUSD, …) in the dashboard or via /pairs. You only receive signals and TP/SL updates for pairs you enable.',
   },
   {
     title: 'Your broker, your book',

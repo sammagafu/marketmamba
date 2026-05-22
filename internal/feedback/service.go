@@ -58,9 +58,9 @@ func (s *Service) broadcastToSubscribers(trade *models.Trade, reason string, exc
 	if s.store == nil || s.inner == nil {
 		return
 	}
-	ids, err := s.store.ListSignalSubscriberTelegramIDs()
+	ids, err := s.store.ListSignalSubscriberTelegramIDsForSymbol(trade.Symbol)
 	if err != nil {
-		logger.Error("List signal subscribers: %v", err)
+		logger.Error("List signal subscribers for %s: %v", trade.Symbol, err)
 		return
 	}
 	cn, hasCommunity := s.inner.(communityNotifier)
