@@ -22,8 +22,8 @@ help:
 	@echo "  make vps-logs        - Follow app logs"
 	@echo "  make vps-migrate     - Run SQL migrations 002-004"
 	@echo "  make vps-seed-admin  - Create email admin from .env"
-	@echo "  make vps-ssl         - Let's Encrypt + nginx (sudo, reads .env)"
-	@echo "  make vps-deploy      - git pull, docker up, auto SSL (sudo)"
+	@echo "  make vps-ssl         - Host nginx + certbot only (optional)"
+	@echo "  make vps-deploy      - git pull, docker up with Caddy TLS"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-migrate    - Run database migrations"
@@ -103,7 +103,7 @@ vps-ssl:
 	sudo -E bash scripts/setup-ssl.sh
 
 vps-deploy:
-	sudo -E bash scripts/vps-deploy.sh
+	bash scripts/vps-deploy.sh
 
 db-migrate:
 	@echo "Running database migrations..."

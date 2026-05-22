@@ -1,15 +1,41 @@
 #!/bin/sh
-# Render Caddyfile from template + env, then run Caddy
+# Render Caddyfile and run Caddy (automatic Let's Encrypt when ENABLE_SSL=true).
 set -eu
 
 DOMAIN="${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}"
 EMAIL="${SSL_EMAIL:-}"
+ENABLE_SSL="${ENABLE_SSL:-true}"
 
-if [ -z "${EMAIL}" ]; then
-  echo "WARN: SSL_EMAIL unset — Caddy may not register with Let's Encrypt" >&2
+CADDYFILE="/etc/caddy/Caddyfile"
+
+if [ "${ENABLE_SSL}" = "false" ] || [ "${APP_ENV:-production}" = "development" ]; then
+  cat > "${CADDYFILE}" <<EOF
+:80 {
+	encode gzip
+	header Cross-Origin-Opener-Policy "same-origin-allow-popups"
+	reverse_proxy app:8090
+}
+EOF
+  echo "Caddy: HTTP only (ENABLE_SSL=false or APP_ENV=development)"
+  exec caddy run --config "${CADDYFILE}" --adapter caddyfile
 fi
 
-sed -e "s/__DOMAIN__/${DOMAIN}/g" -e "s/__SSL_EMAIL__/${EMAIL}/g" \
-  /etc/caddy/Caddyfile.template > /etc/caddy/Caddyfile
+if [ -z "${EMAIL}" ]; then
+  echo "ERROR: Set SSL_EMAIL in .env for automatic HTTPS" >&2
+  exit 1
+fi
 
-exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+cat > "${CADDYFILE}" <<EOF
+{
+	email ${EMAIL}
+}
+
+${DOMAIN} {
+	encode gzip
+	header Cross-Origin-Opener-Policy "same-origin-allow-popups"
+	reverse_proxy app:8090
+}
+EOF
+
+echo "Caddy: automatic HTTPS for ${DOMAIN}"
+exec caddy run --config "${CADDYFILE}" --adapter caddyfile

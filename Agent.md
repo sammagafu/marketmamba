@@ -21,10 +21,9 @@ Logos: `web/src/assets/images/` (`Logo-landscape.svg`, `Logo-potrait.svg`, `favc
 ssh sammy@kkooapp.co.tz
 cd /home/sammy/marketmamba
 cp .env.example .env && nano .env          # or scp .env from Mac (see VPS_DEPLOY.md)
+# Set SSL_EMAIL in .env — HTTPS is automatic (Caddy on ports 80/443)
 docker compose -p marketmamba up -d --build
-# Automatic HTTPS (DNS → VPS first; set SSL_EMAIL in .env):
-sudo -E bash scripts/setup-ssl.sh
-# Or one shot: sudo -E bash scripts/vps-deploy.sh
+# Or: bash scripts/vps-deploy.sh (stops host nginx, pulls, builds, checks https)
 docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/004_web_admins.sql
 docker compose -p marketmamba exec app ./seedadmin
 docker compose -p marketmamba logs -f app

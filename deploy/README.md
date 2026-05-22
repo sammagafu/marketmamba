@@ -6,6 +6,6 @@
 | `Caddyfile.template` | Docker Caddy automatic HTTPS |
 | `certbot-renew-hook.sh` | Reload nginx after certificate renewal |
 
-**Host (automatic):** `sudo -E bash scripts/setup-ssl.sh` (reads `SSL_EMAIL`, `TELEGRAM_LOGIN_DOMAIN` from `.env`)
+**Default (Docker):** `docker compose -p marketmamba up -d --build` — Caddy on 80/443, needs `SSL_EMAIL` in `.env`
 
-**Docker (automatic):** `docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d`
+**Optional host nginx:** `sudo -E bash scripts/setup-ssl.sh` (stop/disable Docker `caddy` first)

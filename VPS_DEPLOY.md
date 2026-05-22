@@ -75,7 +75,8 @@ Check:
 
 ```bash
 docker compose -p marketmamba ps
-curl -s http://127.0.0.1:8090/health
+curl -sI https://marketmamba.kkooapp.co.tz/health
+# Or direct app (bypass Caddy): curl -s http://127.0.0.1:8090/health
 ```
 
 ---
@@ -112,61 +113,53 @@ Log in at `https://marketmamba.kkooapp.co.tz` → **Admin login (email)**.
 
 ## 6. Automatic SSL (HTTPS)
 
-DNS must point your domain (e.g. `marketmamba.kkooapp.co.tz`) → this VPS. Ports **80** and **443** must be open.
+**Built into `docker compose`** — the `caddy` service obtains and renews Let's Encrypt certificates.
 
-### Option A — Host nginx + Certbot (recommended)
-
-1. Set in `.env`:
+1. DNS: your domain (e.g. `marketmamba.kkooapp.co.tz`) → this VPS.
+2. In `.env`:
 
    ```bash
    SSL_EMAIL=your-email@example.com
    TELEGRAM_LOGIN_DOMAIN=marketmamba.kkooapp.co.tz
+   PUBLIC_SITE_URL=https://marketmamba.kkooapp.co.tz
    ```
 
-2. Run once (idempotent — safe to re-run for renew/updates):
+3. Stop host nginx if it uses ports 80/443:
+
+   ```bash
+   sudo systemctl stop nginx
+   ```
+
+4. Deploy:
 
    ```bash
    cd /home/sammy/marketmamba
-   sudo -E bash scripts/setup-ssl.sh
+   docker compose -p marketmamba up -d --build
    ```
 
-   Or full deploy + SSL:
-
-   ```bash
-   sudo -E bash scripts/vps-deploy.sh
-   ```
-
-What it does:
-
-- Renders nginx from `deploy/*.template` for your domain
-- Obtains Let's Encrypt cert via **webroot** (`/var/www/certbot`)
-- Installs HTTPS config with HTTP→HTTPS redirect + Telegram `COOP` header
-- Enables **certbot.timer** for automatic renewal + nginx reload hook
+   Or: `bash scripts/vps-deploy.sh`
 
 **Verify:**
 
 ```bash
 curl -sI https://marketmamba.kkooapp.co.tz/health
-sudo certbot renew --dry-run
+docker compose -p marketmamba logs -f caddy
 ```
 
-### Option B — Docker Caddy (all-in-one TLS)
+Certs persist in Docker volume `marketmamba_caddy_data`. Renewal is automatic.
 
-No host nginx. Caddy requests and renews certificates automatically.
+### Optional — host nginx + Certbot
+
+Only if you do **not** use the Docker `caddy` service: `sudo -E bash scripts/setup-ssl.sh`
+
+### Local dev (no TLS)
 
 ```bash
-# Stop host nginx if it holds ports 80/443
-sudo systemctl stop nginx
-
-# .env must include SSL_EMAIL
-docker compose -f docker-compose.yml -f docker-compose.ssl.yml -p marketmamba up -d --build
+ENABLE_SSL=false
+APP_ENV=development
 ```
 
-Uses `deploy/Caddyfile.template` and proxies to `app:8090` on the Docker network.
-
-### Legacy static configs
-
-`deploy/nginx-marketmamba*.conf.example` remain as references; prefer templates + `scripts/setup-ssl.sh`.
+Then Caddy serves plain HTTP on port 80 only.
 
 ---
 

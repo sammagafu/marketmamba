@@ -1,23 +1,42 @@
 #!/bin/bash
-# Full VPS deploy: pull, build, start app, ensure automatic SSL (host nginx).
-#   cd /home/sammy/marketmamba && sudo -E bash scripts/vps-deploy.sh
+# Full VPS deploy: pull, build, start with automatic HTTPS (Caddy in Docker).
+#   cd /home/sammy/marketmamba && bash scripts/vps-deploy.sh
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_DIR}"
 
+if [ ! -f .env ]; then
+  echo "ERROR: Missing .env — copy .env.example and set SSL_EMAIL, tokens, secrets." >&2
+  exit 1
+fi
+
 git pull
+
+# Host nginx conflicts with Caddy on ports 80/443
+if [ "$(id -u)" -eq 0 ]; then
+  systemctl stop nginx 2>/dev/null || true
+else
+  echo "Tip: stop host nginx if ports 80/443 are in use: sudo systemctl stop nginx"
+fi
 
 docker compose -p marketmamba up -d --build
 
-if command -v nginx >/dev/null 2>&1 || [ "$(id -u)" -eq 0 ]; then
-  if [ "$(id -u)" -eq 0 ]; then
-    bash "${REPO_DIR}/scripts/setup-ssl.sh"
-  else
-    echo "Run SSL setup as root: sudo -E bash scripts/setup-ssl.sh"
-  fi
+DOMAIN="${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}"
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+  DOMAIN="${TELEGRAM_LOGIN_DOMAIN:-${DOMAIN}}"
+fi
+
+echo "Waiting for TLS (first boot may take ~30s)..."
+sleep 5
+if curl -sfI "https://${DOMAIN}/health" >/dev/null 2>&1; then
+  echo "HTTPS OK: https://${DOMAIN}"
 else
-  echo "Skip SSL: nginx not installed (or use docker-compose.ssl.yml + Caddy)."
+  echo "WARN: https://${DOMAIN}/health not ready yet — check DNS, SSL_EMAIL, and: docker compose -p marketmamba logs caddy"
 fi
 
 echo "Deploy complete."

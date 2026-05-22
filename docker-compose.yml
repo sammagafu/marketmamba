@@ -55,8 +55,11 @@ services:
       FREE_TRIAL_DAYS: ${FREE_TRIAL_DAYS:-30}
       TELEGRAM_ADMIN_USER_IDS: ${TELEGRAM_ADMIN_USER_IDS:?Set TELEGRAM_ADMIN_USER_IDS in .env}
       SUBSCRIPTION_CONTACT: ${SUBSCRIPTION_CONTACT:-Free testing — no payment yet.}
+    # Public HTTPS via caddy; localhost:8090 for health checks / optional host nginx
     ports:
       - "127.0.0.1:8090:8090"
+    expose:
+      - "8090"
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,8 +67,36 @@ services:
       - forexbot-network
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: marketmamba-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file:
+      - .env
+    environment:
+      TELEGRAM_LOGIN_DOMAIN: ${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}
+      SSL_EMAIL: ${SSL_EMAIL:?Set SSL_EMAIL in .env for automatic HTTPS}
+      ENABLE_SSL: ${ENABLE_SSL:-true}
+      APP_ENV: ${APP_ENV:-production}
+    volumes:
+      - ./deploy/Caddyfile.template:/etc/caddy/Caddyfile.template:ro
+      - ./scripts/caddy-entrypoint.sh:/usr/local/bin/caddy-entrypoint.sh:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    entrypoint: ["/bin/sh", "/usr/local/bin/caddy-entrypoint.sh"]
+    depends_on:
+      - app
+    networks:
+      - forexbot-network
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   forexbot-network:
