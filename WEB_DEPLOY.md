@@ -33,9 +33,9 @@ docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < mi
 **Create `.env` on the VPS** (same folder as `docker-compose.yml`). Compose reads it automatically; without it you get empty `WEB_API_KEY` and web login breaks.
 
 ```bash
-cd ~/forex-bot
-cp .env.example .env
-nano .env
+ssh sammy@kkooapp.co.tz
+cd /home/sammy/marketmamba
+scp ... sammy@kkooapp.co.tz:/home/sammy/marketmamba/.env   # from Mac — see VPS_DEPLOY.md
 ```
 
 Generate secrets on the server:

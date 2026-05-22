@@ -13,8 +13,9 @@ Use this file as the index for deployment and admin setup.
 ## Quick VPS commands
 
 ```bash
-cd ~/forex-bot
-cp .env.example .env && nano .env          # fill secrets (never commit .env)
+ssh sammy@kkooapp.co.tz
+cd /home/sammy/marketmamba
+cp .env.example .env && nano .env          # or scp .env from Mac (see VPS_DEPLOY.md)
 docker compose -p marketmamba up -d --build
 docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/004_web_admins.sql
 docker compose -p marketmamba exec app ./server seed-admin

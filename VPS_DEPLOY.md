@@ -17,12 +17,19 @@ Add an **A record**:
 ## 2. Clone and create `.env`
 
 ```bash
-ssh user@YOUR_VPS_IP
-cd ~
-git clone git@github.com:sammagafu/marketmamba.git forex-bot
-cd forex-bot
+ssh sammy@kkooapp.co.tz
+cd /home/sammy/marketmamba
+# first time only:
+# git clone git@github.com:sammagafu/marketmamba.git /home/sammy/marketmamba
 cp .env.example .env
 nano .env
+```
+
+**Copy `.env` from your Mac:**
+
+```bash
+scp /Users/codexl-008/iloveprojects/forex-bot/.env \
+  sammy@kkooapp.co.tz:/home/sammy/marketmamba/.env
 ```
 
 ### Required variables
@@ -132,7 +139,7 @@ docker compose -p marketmamba down
 
 ```bash
 # Update after git pull
-cd ~/forex-bot && git pull
+cd /home/sammy/marketmamba && git pull
 docker compose -p marketmamba up -d --build
 
 # Logs
