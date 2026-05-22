@@ -88,6 +88,12 @@ docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < mi
 docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/004_web_admins.sql
 ```
 
+Or run the fix script (stops old containers, rebuilds, migrates):
+
+```bash
+bash scripts/vps-fix.sh
+```
+
 ---
 
 ## 5. Create admin user (email + password)
@@ -177,8 +183,12 @@ After email admin login:
 
 | Issue | Fix |
 |-------|-----|
+| `go.mod requires go >= 1.25` | `git pull` — Dockerfile uses Go 1.23; rebuild |
+| `bind :8090: address already in use` | `docker compose -p marketmamba down` then `bash scripts/vps-fix.sh` |
+| `relation "broker_connections" does not exist` | Run migration `002_broker_connections.sql` |
+| `Admins: []` in logs | Fix `.env`: `TELEGRAM_ADMIN_USER_IDS=5311857635`, restart app |
 | `WEB_API_KEY variable is not set` | Create `.env` in project folder, restart compose |
-| `getUpdates conflict` | Stop bot on Mac; only VPS running |
+| `getUpdates conflict` | Stop bot on Mac: `docker compose -p marketmamba down`; only one VPS container |
 | 502 from nginx | `docker compose -p marketmamba ps`, check port 8090 |
 | Email login fails | Run migration 004 + `seed-admin`; check `TELEGRAM_ADMIN_USER_IDS` |
-| Widget missing | `/setdomain`, use HTTPS, not localhost |
+| Widget missing | BotFather Web Login allowed URLs, use HTTPS |
