@@ -8,7 +8,7 @@
 #
 # Usage:
 #   cd /home/sammy/marketmamba
-#   SSL_EMAIL=you@example.com sudo -E bash scripts/setup-ssl.sh
+#   SSL_EMAIL=magafu317@gmail.com sudo -E bash scripts/setup-ssl.sh
 #
 # Reads DOMAIN from TELEGRAM_LOGIN_DOMAIN or SSL_DOMAIN; email from SSL_EMAIL or .env
 set -euo pipefail

@@ -73,14 +73,14 @@ Run migration `006_auto_trade_approval.sql` once (or rely on app startup migrati
 
 | Variable | What to put |
 |----------|-------------|
-| `ADMIN_EMAIL` | Your email (e.g. `iammagafu@gmail.com`) |
+| `ADMIN_EMAIL` | Your email (e.g. `magafu317@gmail.com`) |
 | `ADMIN_PASSWORD` | Strong password (8+ chars) — **VPS only, never commit** |
 | `ADMIN_TELEGRAM_ID` | Same as `TELEGRAM_ADMIN_USER_IDS` |
 
 Example block in `.env` (replace password locally on the server):
 
 ```env
-ADMIN_EMAIL=iammagafu@gmail.com
+ADMIN_EMAIL=magafu317@gmail.com
 ADMIN_PASSWORD=your-strong-password-here
 ADMIN_TELEGRAM_ID=5311857635
 ```
@@ -141,7 +141,7 @@ Log in at `https://marketmamba.kkooapp.co.tz` → **Admin login (email)**.
 2. In `.env`:
 
    ```bash
-   SSL_EMAIL=your-email@example.com
+   SSL_EMAIL=magafu317@gmail.com
    TELEGRAM_LOGIN_DOMAIN=marketmamba.kkooapp.co.tz
    PUBLIC_SITE_URL=https://marketmamba.kkooapp.co.tz
    ```

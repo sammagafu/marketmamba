@@ -26,7 +26,7 @@ async function submit() {
     <p class="login-title">Admin login (email)</p>
     <div class="field">
       <label>Email</label>
-      <input v-model="email" type="email" autocomplete="username" placeholder="you@example.com" />
+      <input v-model="email" type="email" autocomplete="username" placeholder="magafu317@gmail.com" />
     </div>
     <div class="field">
       <label>Password</label>
