@@ -239,13 +239,22 @@ func (sm *SignalMonitor) generateAndExecuteSignal() error {
 		return nil // No signal this iteration
 	}
 
-	logger.Info("Signal generated for user %d: %s %s (strength: %.2f)", sm.userID, signal.Symbol, signal.Type, signal.Strength)
+	logger.Info(
+		"Signal generated for user %d: %s %s | strength=%.2f SL=%.5f TP=%.5f",
+		sm.userID, signal.Symbol, signal.Type, signal.Strength, signal.StopLoss, signal.TakeProfit,
+	)
 
 	// Execute the signal
-	_, err = sm.executor.ExecuteSignal(signal)
+	pos, err := sm.executor.ExecuteSignal(signal)
 	if err != nil {
-		logger.Warn("Failed to execute signal: %v", err)
+		logger.Warn("[%s] Failed to execute %s for user %d: %v", signal.Symbol, signal.Type, sm.userID, err)
 		return nil // Don't return error; continue monitoring
+	}
+	if pos != nil {
+		logger.Info(
+			"Trade opened for user %d: %s %s qty=%.2f entry=%.5f SL=%.5f TP=%.5f id=%s",
+			sm.userID, pos.Symbol, pos.Type, pos.Quantity, pos.EntryPrice, pos.StopLoss, pos.TakeProfit, pos.ID,
+		)
 	}
 
 	return nil

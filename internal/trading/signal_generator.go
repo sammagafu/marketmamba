@@ -41,16 +41,20 @@ func (sg *SignalGenerator) GenerateSignal(
 	if spread < 0 {
 		spread = -spread
 	}
+	maxSpread := currentPrice * 0.0003 // ~3 pips on EURUSD
 
 	// Spread filter: reject if spread is too large (more than 3 pips)
-	if spread > currentPrice*0.0003 {
-		logger.Debug("Signal rejected: spread too large (%.5f)", spread)
+	if spread > maxSpread {
+		logger.Debug(
+			"[%s] Signal rejected: spread %.5f (%.1f pips) > max %.5f (%.1f pips) | bid=%.5f ask=%.5f price=%.5f",
+			sg.symbol, spread, spreadToPips(spread), maxSpread, spreadToPips(maxSpread), bid, ask, currentPrice,
+		)
 		return nil
 	}
 
 	// ATR volatility filter: volatility must be reasonable
 	if !sg.checkVolatilityFilter(atr, currentPrice) {
-		logger.Debug("Signal rejected: volatility too low")
+		logger.Debug("[%s] Signal rejected: volatility too low (ATR=%.5f, price=%.5f)", sg.symbol, atr, currentPrice)
 		return nil
 	}
 
@@ -59,7 +63,7 @@ func (sg *SignalGenerator) GenerateSignal(
 
 	// RSI filter: avoid overbought/oversold extremes
 	if !sg.checkRSIFilter(rsi) {
-		logger.Debug("Signal rejected: RSI filter failed (RSI: %.2f)", rsi)
+		logger.Debug("[%s] Signal rejected: RSI filter failed (RSI=%.2f)", sg.symbol, rsi)
 		return nil
 	}
 
@@ -74,11 +78,17 @@ func (sg *SignalGenerator) GenerateSignal(
 	signal = sg.calculatePriceTargets(signal, currentPrice, atr)
 
 	// Final strength validation
-	if signal.Strength < sg.minStrength {
-		logger.Debug("Signal rejected: strength too low (%.2f < %.2f)", signal.Strength, sg.minStrength)
+	if signal == nil || signal.Strength < sg.minStrength {
+		if signal != nil {
+			logger.Debug("[%s] Signal rejected: strength too low (%.2f < %.2f)", sg.symbol, signal.Strength, sg.minStrength)
+		}
 		return nil
 	}
 
+	logger.Info(
+		"[%s] Signal passed filters | %s spread=%.5f (%.1f pips, max %.1f) bid=%.5f ask=%.5f strength=%.2f",
+		sg.symbol, signal.Type, spread, spreadToPips(spread), spreadToPips(maxSpread), bid, ask, signal.Strength,
+	)
 	return signal
 }
 
@@ -317,8 +327,8 @@ func SimulateScalpingOpportunity(symbol string, opportunityType string) *models.
 		ema50 = 1.1030
 		ema200 = 1.1000
 		rsi = 55
-		bid = 1.1048
-		ask = 1.1052
+		bid = 1.10495
+		ask = 1.10505
 
 	case "DOWNTREND_SCALP":
 		// Strong downtrend with pullback
@@ -328,8 +338,8 @@ func SimulateScalpingOpportunity(symbol string, opportunityType string) *models.
 		ema50 = 1.0970
 		ema200 = 1.1000
 		rsi = 45
-		bid = 1.0948
-		ask = 1.0952
+		bid = 1.09495
+		ask = 1.09505
 
 	case "TREND_CONFIRMATION":
 		// Clean trend following setup
@@ -339,12 +349,17 @@ func SimulateScalpingOpportunity(symbol string, opportunityType string) *models.
 		ema50 = 1.1040
 		ema200 = 1.1020
 		rsi = 60
-		bid = 1.1053
-		ask = 1.1057
+		bid = 1.10545
+		ask = 1.10555
 
 	default:
 		return nil
 	}
 
 	return sg.GenerateSignal(currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask)
+}
+
+// spreadToPips converts price spread to approximate pips (5-digit FX quote).
+func spreadToPips(spread float64) float64 {
+	return spread / 0.0001
 }
