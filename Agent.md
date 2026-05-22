@@ -6,7 +6,7 @@ Use this file as the index for deployment and admin setup.
 
 | Doc | Purpose |
 |-----|---------|
-| [VPS_DEPLOY.md](./VPS_DEPLOY.md) | **Start here** — `.env` variables, copy-paste VPS commands, nginx, admin seed |
+| [VPS_DEPLOY.md](./VPS_DEPLOY.md) | **Start here** — `.env` variables, copy-paste VPS commands, nginx, SSL, admin seed |
 | [WEB_DEPLOY.md](./WEB_DEPLOY.md) | Web dashboard, Telegram login, local dev proxy |
 | [README.md](./README.md) | Project overview |
 
