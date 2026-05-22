@@ -8,10 +8,12 @@ import (
 	"strconv"
 	"strings"
 
+	"forex-bot/internal/auth"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
+	"forex-bot/internal/users"
 )
 
 //go:embed dist/*
@@ -23,15 +25,17 @@ type Server struct {
 	cfg           *config.Config
 	storage       *storage.PostgresStorage
 	subs          *subscription.Service
+	users         *users.Service
 	resolveBroker BrokerResolver
 	mux           *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, resolve BrokerResolver) *Server {
+func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, usersSvc *users.Service, resolve BrokerResolver) *Server {
 	s := &Server{
 		cfg:           cfg,
 		storage:       store,
 		subs:          subs,
+		users:         usersSvc,
 		resolveBroker: resolve,
 		mux:           http.NewServeMux(),
 	}
@@ -42,7 +46,9 @@ func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscri
 func (s *Server) routes() {
 	s.mux.HandleFunc("/health", s.handleHealth)
 	s.mux.HandleFunc("/api/v1/config", s.handlePublicConfig)
-	s.mux.HandleFunc("/api/v1/brokers/types", s.withAuth(s.handleBrokerTypes))
+	s.mux.HandleFunc("/api/v1/auth/telegram", s.handleTelegramLogin)
+	s.mux.HandleFunc("/api/v1/auth/me", s.withUser(s.handleAuthMe))
+	s.mux.HandleFunc("/api/v1/brokers/types", s.withUser(s.handleBrokerTypes))
 	s.mux.HandleFunc("/api/v1/brokers/connection", s.withUser(s.handleBrokerConnection))
 	s.mux.HandleFunc("/api/v1/brokers/test", s.withUser(s.handleBrokerTest))
 	s.mux.HandleFunc("/api/v1/status", s.withUser(s.handleStatus))
@@ -81,7 +87,7 @@ func (s *Server) Handler() http.Handler {
 		if origin != "" && s.allowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Telegram-User-Id")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Telegram-User-Id, Authorization")
 			w.Header().Set("Vary", "Origin")
 		}
 		if r.Method == http.MethodOptions {
@@ -122,20 +128,53 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) withUser(next http.HandlerFunc) http.HandlerFunc {
-	return s.withAuth(func(w http.ResponseWriter, r *http.Request) {
-		raw := r.Header.Get("X-Telegram-User-Id")
-		if raw == "" {
-			writeError(w, http.StatusBadRequest, "X-Telegram-User-Id header required")
-			return
+	return func(w http.ResponseWriter, r *http.Request) {
+		var uid int64
+		var err error
+
+		if token := bearerToken(r); token != "" {
+			uid, err = auth.Verify(s.sessionSecret(), token)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "invalid or expired session — log in again")
+				return
+			}
+		} else {
+			if s.cfg.App.WebAPIKey != "" {
+				key := r.Header.Get("X-API-Key")
+				if key == "" {
+					key = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+				}
+				if key != s.cfg.App.WebAPIKey {
+					writeError(w, http.StatusUnauthorized, "log in with Telegram or provide API key")
+					return
+				}
+			}
+			raw := r.Header.Get("X-Telegram-User-Id")
+			if raw == "" {
+				writeError(w, http.StatusUnauthorized, "log in with Telegram")
+				return
+			}
+			uid, err = strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid telegram user id")
+				return
+			}
 		}
-		uid, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid telegram user id")
-			return
-		}
+
 		ctx := context.WithValue(r.Context(), userIDKey, uid)
 		next(w, r.WithContext(ctx))
-	})
+	}
+}
+
+func bearerToken(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	if strings.HasPrefix(h, "Bearer ") {
+		t := strings.TrimPrefix(h, "Bearer ")
+		if strings.Contains(t, ".") {
+			return t
+		}
+	}
+	return r.Header.Get("X-Session-Token")
 }
 
 func (s *Server) withAdmin(next http.HandlerFunc) http.HandlerFunc {

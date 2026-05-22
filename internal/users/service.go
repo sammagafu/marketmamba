@@ -47,6 +47,30 @@ func (s *Service) Touch(telegramID int64) error {
 	return s.store.UpdateUserLastSeen(telegramID, time.Now())
 }
 
+// RegisterFromLogin creates or updates a user from Telegram Login Widget data.
+func (s *Service) RegisterFromLogin(telegramID int64, username, firstName, lastName string) (*models.User, error) {
+	now := time.Now()
+	u := &models.User{
+		ID:         utils.GenerateID("usr"),
+		TelegramID: telegramID,
+		Username:   username,
+		FirstName:  firstName,
+		LastName:   lastName,
+		CreatedAt:  now,
+		LastSeenAt: now,
+	}
+	if err := s.store.UpsertUser(u); err != nil {
+		return nil, err
+	}
+	if err := s.ensureDefaults(telegramID); err != nil {
+		return nil, err
+	}
+	if err := s.subs.EnsureTrial(telegramID); err != nil {
+		return nil, err
+	}
+	return s.store.GetUserByTelegramID(telegramID)
+}
+
 func (s *Service) ensureDefaults(userID int64) error {
 	if _, err := s.store.GetBotState(userID); err != nil {
 		state := &models.BotState{

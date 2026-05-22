@@ -1,9 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { api, loadSession, saveSession } from './api'
+import { api, loadSession, saveLegacySession, clearSession, isLoggedIn } from './api'
+import TelegramLogin from './components/TelegramLogin.vue'
 
+const loggedIn = ref(isLoggedIn())
+const userName = ref('')
 const apiKey = ref(loadSession().apiKey)
 const telegramId = ref(loadSession().telegramId)
+const showManual = ref(false)
 const config = ref(null)
 const status = ref(null)
 const account = ref(null)
@@ -22,12 +26,31 @@ const activateDays = ref(30)
 const isAdmin = ref(false)
 
 const selectedBroker = computed(() => brokers.value.find((b) => b.id === provider.value))
+const botUsername = computed(() => config.value?.telegram_bot_username || 'market_mamba_bot')
 
-function saveAuth() {
-  saveSession(apiKey.value.trim(), telegramId.value.trim())
-  message.value = 'Session saved'
+function onLoggedIn(data) {
+  loggedIn.value = true
+  userName.value = [data.user?.first_name, data.user?.last_name].filter(Boolean).join(' ')
+  message.value = `Welcome, ${userName.value || data.telegram_id}!`
   messageOk.value = true
   refresh()
+}
+
+function saveAuth() {
+  saveLegacySession(apiKey.value.trim(), telegramId.value.trim())
+  loggedIn.value = true
+  message.value = 'Manual session saved'
+  messageOk.value = true
+  refresh()
+}
+
+function logout() {
+  clearSession()
+  loggedIn.value = false
+  status.value = null
+  account.value = null
+  message.value = 'Logged out'
+  messageOk.value = true
 }
 
 function onProviderChange() {
@@ -35,9 +58,13 @@ function onProviderChange() {
 }
 
 async function refresh() {
+  if (!loggedIn.value) return
   message.value = ''
   try {
     config.value = await fetch('/api/v1/config').then((r) => r.json())
+    const me = await api('/auth/me')
+    userName.value = [me.user?.first_name, me.user?.last_name].filter(Boolean).join(' ')
+    isAdmin.value = me.is_admin
     status.value = await api('/status')
     subscription.value = await api('/subscription')
     try {
@@ -55,16 +82,15 @@ async function refresh() {
       provider.value = conn.connection.provider
       onProviderChange()
     }
-    try {
+    if (isAdmin.value) {
       adminStats.value = await api('/admin/stats')
       const u = await api('/admin/users')
       recentUsers.value = u.users || []
-      isAdmin.value = true
-    } catch {
-      isAdmin.value = false
-      adminStats.value = null
     }
   } catch (e) {
+    if (e.message.includes('session') || e.message.includes('log in')) {
+      logout()
+    }
     message.value = e.message
     messageOk.value = false
   }
@@ -129,31 +155,53 @@ async function adminActivate() {
   }
 }
 
-onMounted(refresh)
+onMounted(async () => {
+  config.value = await fetch('/api/v1/config').then((r) => r.json())
+  if (loggedIn.value) refresh()
+})
 </script>
 
 <template>
   <header class="header">
     <div>
       <h1>🐍 Market Mamba</h1>
-      <p class="muted">Public bot · manual subscriptions · per-user brokers</p>
+      <p class="muted">Forex automation · per-user brokers</p>
     </div>
-    <div class="card" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:end">
-      <div class="field" style="margin:0">
-        <label>API key</label>
-        <input v-model="apiKey" type="password" placeholder="WEB_API_KEY" />
-      </div>
-      <div class="field" style="margin:0">
-        <label>Your Telegram ID</label>
-        <input v-model="telegramId" placeholder="from @userinfobot" />
-      </div>
-      <button class="btn-primary" @click="saveAuth">Save</button>
+    <div v-if="loggedIn" style="display:flex;align-items:center;gap:1rem">
+      <span v-if="userName">Hi, <strong>{{ userName }}</strong></span>
+      <button class="btn-secondary" @click="logout">Log out</button>
     </div>
   </header>
 
   <p v-if="message" :class="messageOk ? 'ok' : 'err'" style="text-align:center">{{ message }}</p>
 
-  <div class="grid">
+  <section v-if="!loggedIn" class="card wide login-card">
+    <h2>Log in</h2>
+    <TelegramLogin
+      v-if="config?.telegram_login_enabled"
+      :bot-username="botUsername"
+      @logged-in="onLoggedIn"
+      @error="(m) => { message = m; messageOk = false }"
+    />
+    <p>
+      <button class="btn-secondary" type="button" @click="showManual = !showManual">
+        {{ showManual ? 'Hide' : 'Show' }} manual login (dev)
+      </button>
+    </p>
+    <div v-if="showManual" class="manual-row">
+      <div class="field">
+        <label>API key</label>
+        <input v-model="apiKey" type="password" />
+      </div>
+      <div class="field">
+        <label>Telegram ID</label>
+        <input v-model="telegramId" />
+      </div>
+      <button class="btn-primary" @click="saveAuth">Continue</button>
+    </div>
+  </section>
+
+  <div v-else class="grid">
     <section class="card">
       <h2>Status</h2>
       <template v-if="status">
@@ -162,7 +210,6 @@ onMounted(refresh)
         <p v-if="status.trade_message" class="muted">{{ status.trade_message }}</p>
         <p>Auto: {{ status.auto_trading ? 'on' : 'off' }}</p>
       </template>
-      <p v-else class="muted">Enter API key + Telegram ID</p>
     </section>
 
     <section class="card">
@@ -180,7 +227,6 @@ onMounted(refresh)
         <p v-if="subscription.subscription">
           Plan: {{ subscription.subscription.plan }} · {{ subscription.subscription.status }}
         </p>
-        <p v-else class="muted">No plan — /start in Telegram</p>
         <p class="muted">{{ config?.subscription_message }}</p>
       </template>
     </section>
@@ -213,22 +259,19 @@ onMounted(refresh)
 
     <section class="card wide">
       <h2>Broker connection</h2>
-      <p class="muted">Mock works now. Other brokers appear when adapters are added.</p>
       <div class="field">
         <label>Broker</label>
         <select v-model="provider" @change="onProviderChange">
-          <option v-for="b in brokers" :key="b.id" :value="b.id">
-            {{ b.name }} ({{ b.status }})
-          </option>
+          <option v-for="b in brokers" :key="b.id" :value="b.id">{{ b.name }} ({{ b.status }})</option>
         </select>
       </div>
       <div v-for="f in dynamicFields" :key="f.key" class="field">
         <label>{{ f.label }}</label>
-        <input :data-cred="f.key" :type="f.type === 'password' ? 'password' : 'text'" :placeholder="f.placeholder" />
+        <input :data-cred="f.key" :type="f.type === 'password' ? 'password' : 'text'" />
       </div>
       <div class="field">
         <label>Label</label>
-        <input v-model="brokerLabel" placeholder="My demo account" />
+        <input v-model="brokerLabel" />
       </div>
       <div style="display:flex;gap:0.5rem">
         <button class="btn-secondary" @click="testBroker">Test</button>
@@ -253,3 +296,9 @@ onMounted(refresh)
     </section>
   </div>
 </template>
+
+<style scoped>
+.login-card { max-width: 520px; margin: 2rem auto; }
+.manual-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-top: 1rem; }
+.manual-row .field { flex: 1; min-width: 140px; margin: 0; }
+</style>

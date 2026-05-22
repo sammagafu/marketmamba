@@ -35,12 +35,14 @@ git pull
 docker compose -p marketmamba up -d --build
 ```
 
-## Web login
+## Web login (Telegram)
 
-1. Open the site
-2. Enter `WEB_API_KEY` and your **Telegram user ID**
-3. Save — dashboard loads your account
-4. Admins (in `TELEGRAM_ADMIN_USER_IDS`) see user stats + manual activate
+1. In @BotFather: `/setdomain` → choose your bot → enter `marketmamba.kkooapp.co.tz`
+2. Set `TELEGRAM_BOT_USERNAME=market_mamba_bot` and `WEB_SESSION_SECRET` in `.env`
+3. Open the site → **Log in with Telegram**
+4. Admins see stats after login (if your Telegram ID is in `TELEGRAM_ADMIN_USER_IDS`)
+
+**Local dev:** Telegram widget often fails on `localhost` — use “manual login (dev)” with API key + Telegram ID.
 
 ## Telegram admin
 

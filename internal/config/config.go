@@ -19,6 +19,7 @@ type Config struct {
 
 type TelegramConfig struct {
 	BotToken       string
+	BotUsername    string // for Login Widget, e.g. market_mamba_bot
 	AllowedUserIDs []int64 // legacy; optional when public
 	AdminUserIDs   []int64
 }
@@ -51,6 +52,7 @@ type AppConfig struct {
 	SubscriptionRequired        bool
 	FreeTrialDays               int
 	SubscriptionContactMessage  string
+	WebSessionSecret            string
 }
 
 func LoadConfig() (*Config, error) {
@@ -59,6 +61,7 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Telegram: TelegramConfig{
 			BotToken:       getEnv("TELEGRAM_BOT_TOKEN", ""),
+			BotUsername:    getEnv("TELEGRAM_BOT_USERNAME", "market_mamba_bot"),
 			AllowedUserIDs: parseUserIDs(getEnv("TELEGRAM_ALLOWED_USER_IDS", "")),
 			AdminUserIDs:   parseAdminIDs(getEnv("TELEGRAM_ADMIN_USER_IDS", getEnv("TELEGRAM_ALLOWED_USER_IDS", ""))),
 		},
@@ -87,6 +90,7 @@ func LoadConfig() (*Config, error) {
 			SubscriptionRequired:       getEnv("SUBSCRIPTION_REQUIRED", "false") == "true",
 			FreeTrialDays:              parseInt(getEnv("FREE_TRIAL_DAYS", "30")),
 			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "Free testing period. Contact @codexxl on Telegram to extend after launch."),
+			WebSessionSecret:           getEnv("WEB_SESSION_SECRET", ""),
 		},
 	}
 

@@ -71,7 +71,7 @@ func main() {
 	coordinator.Start(ctx)
 
 	if cfg.App.EnableWeb {
-		apiServer := api.NewServer(cfg, db, subs, resolveBroker)
+		apiServer := api.NewServer(cfg, db, subs, usersSvc, resolveBroker)
 		go func() {
 			addr := ":" + cfg.App.HTTPPort
 			logger.Info("Web dashboard listening on %s", addr)

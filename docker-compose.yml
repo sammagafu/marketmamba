@@ -36,6 +36,8 @@ services:
       HTTP_PORT: ${HTTP_PORT:-8090}
       ENABLE_WEB: ${ENABLE_WEB:-true}
       WEB_API_KEY: ${WEB_API_KEY}
+      WEB_SESSION_SECRET: ${WEB_SESSION_SECRET}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-market_mamba_bot}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://marketmamba.kkooapp.co.tz}
       BROKER_ENCRYPTION_KEY: ${BROKER_ENCRYPTION_KEY}
       PUBLIC_MODE: ${PUBLIC_MODE:-true}

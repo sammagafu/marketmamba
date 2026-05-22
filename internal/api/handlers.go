@@ -21,11 +21,13 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"app":                    "Market Mamba",
-		"public_mode":            s.cfg.App.PublicMode,
-		"subscription_required":  s.cfg.App.SubscriptionRequired,
-		"subscription_message":   s.cfg.App.SubscriptionContactMessage,
-		"free_trial_days":        s.cfg.App.FreeTrialDays,
+		"app":                   "Market Mamba",
+		"public_mode":           s.cfg.App.PublicMode,
+		"subscription_required": s.cfg.App.SubscriptionRequired,
+		"subscription_message":  s.cfg.App.SubscriptionContactMessage,
+		"free_trial_days":       s.cfg.App.FreeTrialDays,
+		"telegram_bot_username": s.cfg.Telegram.BotUsername,
+		"telegram_login_enabled": s.cfg.Telegram.BotToken != "",
 	})
 }
 
