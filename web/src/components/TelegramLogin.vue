@@ -28,6 +28,26 @@ function hasOidcClient() {
   return id !== '' && id !== '0'
 }
 
+/** OIDC requires origin matching a URL registered in @BotFather → Web Login. */
+function loginOrigin() {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin
+  }
+  try {
+    return new URL(productionLoginUrl()).origin
+  } catch {
+    return `https://${props.loginDomain}`
+  }
+}
+
+function oidcInitOptions() {
+  return {
+    client_id: Number(props.clientId),
+    request_access: ['write'],
+    origin: loginOrigin(),
+  }
+}
+
 async function handleOidc(data) {
   if (!data || data.error) {
     emit('error', data?.error || 'Telegram sign-in cancelled')
@@ -67,12 +87,12 @@ async function handleLegacy(user) {
 }
 
 function openOidcPopup() {
-  const id = Number(props.clientId)
-  if (!id || !window.Telegram?.Login) {
+  const opts = oidcInitOptions()
+  if (!opts.client_id || !window.Telegram?.Login) {
     emit('error', 'Telegram sign-in is still loading — wait a moment and try again')
     return
   }
-  window.Telegram.Login.auth({ client_id: id, request_access: ['write'] }, handleOidc)
+  window.Telegram.Login.auth(opts, handleOidc)
 }
 
 function teardown() {
@@ -91,13 +111,13 @@ function mountOidcWidget() {
   scriptEl.onload = () => {
     const id = Number(props.clientId)
     if (window.Telegram?.Login?.init) {
-      window.Telegram.Login.init({ client_id: id, request_access: ['write'] }, handleOidc)
+      window.Telegram.Login.init(oidcInitOptions(), handleOidc)
     }
     widgetReady.value = true
   }
   scriptEl.onerror = () => {
     loadError.value =
-      `Could not load Telegram sign-in. In @BotFather → Bot Settings → Web Login, add: https://${props.loginDomain}`
+      `Could not load Telegram sign-in. In @BotFather → Web Login, add origin: ${loginOrigin()}`
   }
   document.head.appendChild(scriptEl)
 }
@@ -221,7 +241,7 @@ onUnmounted(() => {
     <p v-else-if="currentHost() && currentHost() !== loginDomain" class="warn-box">
       For production login, open
       <a :href="productionLoginUrl()" class="prod-link">{{ productionLoginUrl() }}</a>
-      or add <code>https://{{ loginDomain }}</code> in @BotFather → Domain (widget) or Web Login (OIDC).
+      or add <code>{{ loginOrigin() }}</code> in @BotFather → Web Login (and Domain for the widget).
     </p>
 
     <p v-if="!useOidc && botUsername && !loadError" class="muted widget-hint">

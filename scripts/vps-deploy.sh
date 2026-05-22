@@ -11,7 +11,13 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-git pull
+if ! git remote get-url origin &>/dev/null; then
+  echo "ERROR: git remote 'origin' is required. Example:" >&2
+  echo "  git remote add origin git@github.com:sammagafu/marketmamba.git" >&2
+  echo "  git branch -M main && git fetch origin && git reset --hard origin/main" >&2
+  exit 1
+fi
+git pull origin main
 
 # Host nginx conflicts with Caddy on ports 80/443
 if [ "$(id -u)" -eq 0 ]; then
