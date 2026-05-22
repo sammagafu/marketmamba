@@ -17,7 +17,7 @@ COPY --from=web /web/dist ./internal/api/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server && go build -o seedadmin ./cmd/seedadmin
 
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates postgresql-client
+RUN apk --no-cache add ca-certificates postgresql-client curl
 WORKDIR /root/
 COPY --from=builder /app/server .
 COPY --from=builder /app/seedadmin .

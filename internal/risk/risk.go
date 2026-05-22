@@ -29,8 +29,8 @@ func (v *RiskValidator) ValidateTradeSignal(
 		return fmt.Errorf("trading is paused")
 	}
 
-	// Check daily loss limit
-	if dailyLoss <= 0 && dailyLoss < -v.settings.MaxDailyLoss*balance {
+	// Check daily loss limit (dailyLoss = total loss amount minus profits today)
+	if balance > 0 && dailyLoss > v.MaxDailyLossAmount(balance) {
 		return fmt.Errorf("daily loss limit hit: %.2f%%", (dailyLoss/balance)*100)
 	}
 
@@ -55,6 +55,14 @@ func (v *RiskValidator) ValidateTradeSignal(
 	}
 
 	return nil
+}
+
+// MaxDailyLossAmount returns max allowed loss in account currency for the period.
+func (v *RiskValidator) MaxDailyLossAmount(balance float64) float64 {
+	if balance <= 0 {
+		return 0
+	}
+	return balance * v.settings.MaxDailyLoss
 }
 
 // CalculateLotSize calculates safe lot size based on risk per trade

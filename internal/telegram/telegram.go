@@ -10,6 +10,7 @@ import (
 
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/decision"
 	"forex-bot/internal/feedback"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
@@ -30,6 +31,12 @@ type TelegramBot struct {
 	subs             *subscription.Service
 	resolveBroker    BrokerResolver
 	outcomeNotifier  feedback.OutcomeNotifier
+	decisionEngine   *decision.Engine
+}
+
+// SetDecisionEngine enables /analyze and sniper advisory messages.
+func (tb *TelegramBot) SetDecisionEngine(e *decision.Engine) {
+	tb.decisionEngine = e
 }
 
 func NewTelegramBot(
@@ -151,10 +158,16 @@ func (tb *TelegramBot) processMessage(msg *tgbotapi.Message) {
 		tb.handlePairs(chatID, userID, parts[1:])
 	case "/autostart":
 		tb.handleAutoStart(chatID, userID)
+	case "/approveauto":
+		tb.handleApproveAuto(chatID, userID, parts[1:])
+	case "/revokeauto":
+		tb.handleRevokeAuto(chatID, userID, parts[1:])
 	case "/autostop":
 		tb.handleAutoStop(chatID, userID)
 	case "/autostatus":
 		tb.handleAutoStatus(chatID, userID)
+	case "/analyze":
+		tb.handleAnalyze(chatID, userID, parts[1:])
 	default:
 		tb.sendMessage(chatID, "❓ Unknown command. Use /start for help.")
 	}
@@ -211,6 +224,9 @@ Welcome! Your Telegram ID: `+"`%d`"+`
 *Trading:*
 /open /close /positions /trades /balance
 /autostart /autostop — automation
+/analyze [SYMBOL] — live sniper decision (TAKE/SKIP/WAIT)
+
+_Admins:_ /approveauto [user_id] · /revokeauto [user_id]
 
 *Web dashboard:*
 https://marketmamba.kkooapp.co.tz
@@ -513,7 +529,18 @@ func (tb *TelegramBot) handleAutoStart(chatID int64, userID int64) {
 		return
 	}
 	_ = tb.storage.UpdateBotState(userID, false, true, false)
-	tb.sendMessage(chatID, "🤖 Automated trading enabled. Connect Mock broker on the website if you have not yet.")
+	if !tb.cfg.App.AutoTradeRequiresApproval || tb.cfg.IsAdmin(userID) {
+		_ = tb.storage.SetAutoTradeApproved(userID, true)
+	}
+	msg := "🤖 Automated trading enabled."
+	if tb.cfg.App.AutoTradeRequiresApproval && !tb.cfg.IsAdmin(userID) {
+		state, _ := tb.storage.GetBotState(userID)
+		if state != nil && !state.AutoTradeApproved {
+			msg += "\n\n⏳ *Pending admin approval* for assisted auto-trade. Signals and /analyze still work."
+		}
+	}
+	msg += "\n\nConnect broker: /broker connect (mock demo) or OANDA practice on the dashboard."
+	tb.sendMessage(chatID, msg)
 }
 
 func (tb *TelegramBot) handleAutoStop(chatID int64, userID int64) {
@@ -527,7 +554,15 @@ func (tb *TelegramBot) handleAutoStatus(chatID int64, userID int64) {
 	if botState.AutoTradingActive {
 		auto = "✅ On"
 	}
-	tb.sendMessage(chatID, fmt.Sprintf("*Automation:* %s", auto))
+	approved := "—"
+	if tb.cfg.App.AutoTradeRequiresApproval {
+		if botState.AutoTradeApproved {
+			approved = "✅ Approved"
+		} else {
+			approved = "⏳ Pending"
+		}
+	}
+	tb.sendMessage(chatID, fmt.Sprintf("*Automation:* %s\n*Auto-trade approval:* %s", auto, approved))
 }
 
 func (tb *TelegramBot) sendMessage(chatID int64, text string) {

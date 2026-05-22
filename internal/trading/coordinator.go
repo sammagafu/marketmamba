@@ -7,6 +7,7 @@ import (
 
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/decision"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/feedback"
@@ -30,6 +31,8 @@ type Coordinator struct {
 	validator       *risk.RiskValidator
 	outcomeNotifier feedback.OutcomeNotifier
 	pairSvc         *pairs.Service
+	decisionEngine  *decision.Engine
+	sniperNotify    SniperNotifier
 	resolve         BrokerResolver
 	mu              sync.Mutex
 	runners         map[int64]*userRunner
@@ -44,6 +47,8 @@ func NewCoordinator(
 	resolve BrokerResolver,
 	outcomeNotifier feedback.OutcomeNotifier,
 	pairSvc *pairs.Service,
+	decisionEngine *decision.Engine,
+	sniperNotify SniperNotifier,
 ) *Coordinator {
 	return &Coordinator{
 		store:           store,
@@ -52,6 +57,8 @@ func NewCoordinator(
 		validator:       v,
 		outcomeNotifier: outcomeNotifier,
 		pairSvc:         pairSvc,
+		decisionEngine:  decisionEngine,
+		sniperNotify:    sniperNotify,
 		resolve:         resolve,
 		runners:         make(map[int64]*userRunner),
 		interval:        15 * time.Second,
@@ -77,14 +84,14 @@ func (c *Coordinator) Start(ctx context.Context) {
 }
 
 func (c *Coordinator) sync(ctx context.Context) {
-	ids, err := c.store.ListAutoTradingUserIDs()
+	ids, err := c.store.ListAutoTradingUserIDs(c.cfg.App.AutoTradeRequiresApproval)
 	if err != nil {
 		logger.Error("Coordinator list users: %v", err)
 		return
 	}
 	want := make(map[int64]bool)
 	for _, id := range ids {
-		ok, _ := c.subs.CanTrade(id)
+		ok, _ := c.subs.CanAutoTrade(id, c.cfg.IsAdmin(id))
 		if !ok {
 			continue
 		}
@@ -126,7 +133,22 @@ func (c *Coordinator) ensureRunner(ctx context.Context, userID int64) {
 			symbols = userSyms
 		}
 	}
-	sigMonitor := NewSignalMonitor(symbols, c.cfg.Risk.RiskRewardRatio, executor, c.store, userID, 10*time.Second)
+	interval := 10 * time.Second
+	if c.cfg.App.DecisionEnabled {
+		interval = c.cfg.DecisionInterval()
+	}
+	sigMonitor := NewSignalMonitor(
+		symbols,
+		c.cfg.Risk.RiskRewardRatio,
+		executor,
+		c.store,
+		userID,
+		interval,
+		c.decisionEngine,
+		c.cfg.App.DecisionAdvisory,
+		c.cfg.App.DecisionAutoExecute,
+		c.sniperNotify,
+	)
 	posMonitor.Start(runCtx, executor)
 	sigMonitor.Start(runCtx)
 

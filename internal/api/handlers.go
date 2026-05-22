@@ -4,12 +4,25 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"forex-bot/internal/accounts"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/models"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	payload := map[string]interface{}{
+		"status":  "ok",
+		"service": "market-mamba",
+		"app_env": s.cfg.App.Environment,
+	}
+	if err := s.storage.Health(); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status": "degraded",
+			"error":  "database",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
@@ -84,6 +97,9 @@ func (s *Server) saveBrokerConnection(w http.ResponseWriter, r *http.Request) {
 	if err := broker.SaveConnection(s.storage, s.cfg.App.BrokerEncryptionKey, uid, req.Provider, req.Label, req.Credentials); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if b, _, err := broker.ResolveBroker(s.storage, uid, s.cfg.App.BrokerEncryptionKey, s.cfg.Broker.Provider); err == nil {
+		_ = accounts.SyncFromBroker(s.storage, uid, req.Provider, b)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "saved", "provider": req.Provider})
 }

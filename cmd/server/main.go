@@ -14,7 +14,9 @@ import (
 	"forex-bot/internal/api"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/decision"
 	"forex-bot/internal/feedback"
+	"forex-bot/internal/marketdata"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/pairs"
@@ -90,17 +92,50 @@ func main() {
 	outcomeSvc := feedback.NewService(tgBot, db, subs, cfg.SignalSymbols())
 	tgBot.SetOutcomeNotifier(outcomeSvc)
 
+	var decisionEngine *decision.Engine
+	if cfg.App.DecisionEnabled {
+		marketSvc := marketdata.NewService(cfg.App.MarketDataAPIKey)
+		cooldown := decision.NewCooldownTracker(cfg.SniperCooldown())
+		decisionEngine = decision.NewEngine(
+			marketSvc,
+			validator,
+			cooldown,
+			cfg.App.SignalMinStrength,
+			cfg.App.SniperMinConfidence,
+			cfg.Risk.RiskRewardRatio,
+		)
+		tgBot.SetDecisionEngine(decisionEngine)
+		logger.Info(
+			"Real-time sniper decisions enabled (provider=%s, interval=%v, cooldown=%v, min conf=%.0f%%, mode advisory=%v auto=%v)",
+			marketSvc.ProviderName(),
+			cfg.DecisionInterval(),
+			cfg.SniperCooldown(),
+			cfg.App.SniperMinConfidence*100,
+			cfg.App.DecisionAdvisory,
+			cfg.App.DecisionAutoExecute,
+		)
+		go warmupMarketData(context.Background(), marketSvc, cfg.SignalSymbols())
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker, outcomeSvc, pairSvc)
+	sniperNotify := trading.SniperNotifier(nil)
+	if cfg.App.DecisionAdvisory {
+		sniperNotify = func(userID int64, d *decision.Decision) {
+			_ = tgBot.NotifySniper(userID, d)
+		}
+	}
+
+	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker, outcomeSvc, pairSvc, decisionEngine, sniperNotify)
 	coordinator.Start(ctx)
 
 	if cfg.App.SignalBroadcastEnabled {
 		pub := signals.NewPublisher(
-			db, subs, tgBot, validator,
+			db, subs, tgBot, validator, decisionEngine,
 			cfg.SignalSymbols(), cfg.SignalBroadcastInterval(),
 			cfg.App.SignalMinStrength,
+			cfg.App.DecisionEnabled,
 		)
 		pub.Start(ctx)
 	}
@@ -132,6 +167,14 @@ func main() {
 	cancel()
 	coordinator.StopAll()
 	logger.Info("Shutdown complete")
+}
+
+func warmupMarketData(ctx context.Context, svc *marketdata.Service, symbols []string) {
+	for _, sym := range symbols {
+		if _, err := svc.Refresh(ctx, sym); err != nil {
+			logger.Warn("Market warmup %s: %v", sym, err)
+		}
+	}
 }
 
 func logStartupBanner(cfg *config.Config) {

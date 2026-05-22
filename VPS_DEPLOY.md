@@ -47,6 +47,28 @@ scp /Users/codexl-008/iloveprojects/forex-bot/.env \
 | `SSL_EMAIL` | Email for Let's Encrypt expiry notices (auto HTTPS) |
 | `TELEGRAM_LOGIN_DOMAIN` | `marketmamba.kkooapp.co.tz` (cert + nginx server_name) |
 
+### Production hardening (recommended)
+
+| Variable | Value |
+|----------|--------|
+| `APP_ENV` | `production` |
+| `SUBSCRIPTION_REQUIRED` | `true` — auto-trade needs active subscription |
+| `AUTO_TRADE_REQUIRES_APPROVAL` | `true` — admin must `/approveauto <telegram_id>` |
+| `MARKET_DATA_API_KEY` | [Twelve Data](https://twelvedata.com/) API key (live FX quotes) |
+| `MAX_DAILY_LOSS` | e.g. `0.02` (2% of balance) — enforced by executor |
+
+**OANDA** (practice first): connect on dashboard with provider `oanda`, credentials `api_token`, `account_id`, `practice=true`. Switch to live with `practice=false` and live token.
+
+**Health / monitoring:**
+
+```bash
+curl -s http://127.0.0.1:8090/health | jq .
+docker compose -p marketmamba ps   # app healthcheck hits /health
+docker compose -p marketmamba logs -f app
+```
+
+Run migration `006_auto_trade_approval.sql` once (or rely on app startup migrations if enabled).
+
 ### Admin email login (optional, recommended)
 
 | Variable | What to put |

@@ -41,6 +41,7 @@ type Storage interface {
 	CreateBotState(state *models.BotState) error
 	GetBotState(userID int64) (*models.BotState, error)
 	UpdateBotState(userID int64, isPaused, autoTrading, dailyLossHit bool) error
+	SetAutoTradeApproved(userID int64, approved bool) error
 
 	// Command Logs
 	LogCommand(log *models.CommandLog) error
@@ -310,19 +311,19 @@ func (ps *PostgresStorage) UpdateDailyStats(stats *models.DailyStats) error {
 
 // Bot State
 func (ps *PostgresStorage) CreateBotState(state *models.BotState) error {
-	query := `INSERT INTO bot_states (id, user_id, is_paused, auto_trading_active, daily_loss_hit, last_active_at, updated_at)
-	VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	query := `INSERT INTO bot_states (id, user_id, is_paused, auto_trading_active, auto_trade_approved, daily_loss_hit, last_active_at, updated_at)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
-	_, err := ps.db.Exec(query, state.ID, state.UserID, state.IsPaused, state.AutoTradingActive, state.DailyLossHit, state.LastActiveAt, state.UpdatedAt)
+	_, err := ps.db.Exec(query, state.ID, state.UserID, state.IsPaused, state.AutoTradingActive, state.AutoTradeApproved, state.DailyLossHit, state.LastActiveAt, state.UpdatedAt)
 	return err
 }
 
 func (ps *PostgresStorage) GetBotState(userID int64) (*models.BotState, error) {
 	state := &models.BotState{}
-	query := `SELECT id, user_id, is_paused, auto_trading_active, daily_loss_hit, last_active_at, updated_at FROM bot_states WHERE user_id = $1`
+	query := `SELECT id, user_id, is_paused, auto_trading_active, auto_trade_approved, daily_loss_hit, last_active_at, updated_at FROM bot_states WHERE user_id = $1`
 
 	err := ps.db.QueryRow(query, userID).Scan(
-		&state.ID, &state.UserID, &state.IsPaused, &state.AutoTradingActive, &state.DailyLossHit, &state.LastActiveAt, &state.UpdatedAt)
+		&state.ID, &state.UserID, &state.IsPaused, &state.AutoTradingActive, &state.AutoTradeApproved, &state.DailyLossHit, &state.LastActiveAt, &state.UpdatedAt)
 
 	if err != nil {
 		return nil, err
@@ -335,6 +336,14 @@ func (ps *PostgresStorage) UpdateBotState(userID int64, isPaused, autoTrading, d
 	query := `UPDATE bot_states SET is_paused=$1, auto_trading_active=$2, daily_loss_hit=$3, last_active_at=$4, updated_at=$5 WHERE user_id=$6`
 
 	_, err := ps.db.Exec(query, isPaused, autoTrading, dailyLossHit, time.Now(), time.Now(), userID)
+	return err
+}
+
+func (ps *PostgresStorage) SetAutoTradeApproved(userID int64, approved bool) error {
+	_, err := ps.db.Exec(
+		`UPDATE bot_states SET auto_trade_approved=$1, updated_at=$2 WHERE user_id=$3`,
+		approved, time.Now(), userID,
+	)
 	return err
 }
 

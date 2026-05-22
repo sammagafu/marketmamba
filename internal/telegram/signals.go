@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"forex-bot/internal/decision"
 	"forex-bot/internal/models"
 	"forex-bot/internal/signals"
 )
@@ -9,4 +10,15 @@ import (
 func (tb *TelegramBot) NotifySignal(telegramID int64, signal *models.TradeSignal) error {
 	tb.sendMessage(telegramID, signals.FormatMessage(signal))
 	return nil
+}
+
+// NotifyDecision implements signals.Notifier for sniper advisory broadcasts.
+func (tb *TelegramBot) NotifyDecision(telegramID int64, d *decision.Decision) error {
+	tb.sendMessage(telegramID, decision.FormatTelegram(d))
+	return nil
+}
+
+// NotifySniper sends a real-time decision to one user (autostart / /analyze).
+func (tb *TelegramBot) NotifySniper(telegramID int64, d *decision.Decision) error {
+	return tb.NotifyDecision(telegramID, d)
 }

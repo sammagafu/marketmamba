@@ -92,21 +92,23 @@ type BotState struct {
 	ID                string    `db:"id"`
 	UserID            int64     `db:"user_id"`
 	IsPaused          bool      `db:"is_paused"`
-	AutoTradingActive bool      `db:"auto_trading_active"`
-	DailyLossHit      bool      `db:"daily_loss_hit"`
+	AutoTradingActive   bool `db:"auto_trading_active"`
+	AutoTradeApproved   bool `db:"auto_trade_approved"`
+	DailyLossHit        bool `db:"daily_loss_hit"`
 	LastActiveAt      time.Time `db:"last_active_at"`
 	UpdatedAt         time.Time `db:"updated_at"`
 }
 
 // TradeSignal represents a trading signal
 type TradeSignal struct {
-	Symbol           string
-	Type             string  // BUY or SELL
-	Strength         float64 // 0-1
-	StopLoss         float64
-	TakeProfit       float64
-	RiskRewardRatio  float64
-	TriggeredAt      time.Time
+	Symbol          string
+	Type            string  // BUY or SELL
+	Strength        float64 // 0-1
+	StopLoss        float64
+	TakeProfit      float64
+	RiskRewardRatio float64
+	Reason          string // human-readable setup (logged and stored with auto-trades)
+	TriggeredAt     time.Time
 }
 
 // CommandLog tracks command execution for audit

@@ -5,7 +5,7 @@ import (
 
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
-	"forex-bot/internal/trading"
+	"forex-bot/internal/signalgen"
 )
 
 // referenceBalance is used only for risk-rule structure checks (not per-user limits).
@@ -37,7 +37,7 @@ func GenerateQualified(symbol string, minStrength, riskRewardRatio float64, vali
 	types := []string{"UPTREND_SCALP", "DOWNTREND_SCALP", "TREND_CONFIRMATION"}
 	var lastErr error
 	for _, opp := range types {
-		sig := trading.SimulateScalpingOpportunity(symbol, opp)
+		sig := signalgen.SimulateScalpingOpportunity(symbol, opp)
 		if sig == nil {
 			lastErr = fmt.Errorf("technical filters rejected %s setup", opp)
 			continue

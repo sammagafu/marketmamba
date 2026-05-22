@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"forex-bot/internal/accounts"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/storage"
 )
@@ -79,6 +80,10 @@ func (tb *TelegramBot) connectBroker(chatID, userID int64, provider string) {
 	b, err := tb.brokerFor(userID)
 	if err != nil {
 		tb.sendMessage(chatID, "✅ Saved, but could not load broker: "+err.Error())
+		return
+	}
+	if syncErr := accounts.SyncFromBroker(pg, userID, provider, b); syncErr != nil {
+		tb.sendMessage(chatID, "✅ Broker saved, but account sync failed: "+syncErr.Error())
 		return
 	}
 	bal, _ := b.GetBalance()

@@ -22,7 +22,7 @@ func NewFromProvider(provider string, creds Credentials) (Broker, error) {
 		}
 		return NewMockBroker(bal), nil
 	case "oanda":
-		return nil, fmt.Errorf("OANDA adapter is not implemented yet — use Mock for now")
+		return NewOANDABroker(creds)
 	case "metaapi":
 		return nil, fmt.Errorf("MetaAPI adapter is not implemented yet — use Mock for now")
 	case "alpaca":

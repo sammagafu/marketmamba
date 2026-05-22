@@ -14,9 +14,10 @@ import (
 )
 
 type Service struct {
-	store    *storage.PostgresStorage
-	subs     *subscription.Service
-	pairSvc  *pairs.Service
+	store   *storage.PostgresStorage
+	subs    *subscription.Service
+	pairSvc *pairs.Service
+	cfg     *config.Config
 }
 
 func NewService(store *storage.PostgresStorage, subs *subscription.Service, cfg *config.Config) *Service {
@@ -24,6 +25,7 @@ func NewService(store *storage.PostgresStorage, subs *subscription.Service, cfg 
 		store:   store,
 		subs:    subs,
 		pairSvc: pairs.NewService(store, cfg),
+		cfg:     cfg,
 	}
 }
 
@@ -81,13 +83,14 @@ func (s *Service) RegisterFromLogin(telegramID int64, username, firstName, lastN
 func (s *Service) ensureDefaults(userID int64) error {
 	if _, err := s.store.GetBotState(userID); err != nil {
 		state := &models.BotState{
-			ID:                utils.GenerateID("state"),
-			UserID:            userID,
-			IsPaused:          false,
-			AutoTradingActive: false,
-			DailyLossHit:      false,
-			LastActiveAt:      time.Now(),
-			UpdatedAt:         time.Now(),
+			ID:                  utils.GenerateID("state"),
+			UserID:              userID,
+			IsPaused:            false,
+			AutoTradingActive:   false,
+			AutoTradeApproved:   s.cfg.IsAdmin(userID),
+			DailyLossHit:        false,
+			LastActiveAt:        time.Now(),
+			UpdatedAt:           time.Now(),
 		}
 		if err := s.store.CreateBotState(state); err != nil {
 			return err

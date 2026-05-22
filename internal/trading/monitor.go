@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"forex-bot/internal/broker"
+	"forex-bot/internal/decision"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/storage"
@@ -156,15 +157,19 @@ func (pm *PositionMonitor) simulatePrice(pos *models.Position) float64 {
 
 // SignalMonitor continuously generates and executes trading signals across symbols.
 type SignalMonitor struct {
-	symbols   []string
-	rrRatio   float64
-	symbolIdx int
-	executor  *TradeExecutor
-	storage   storage.Storage
-	userID    int64
-	interval  time.Duration
-	stopChan  chan struct{}
-	done      chan struct{}
+	symbols            []string
+	rrRatio            float64
+	symbolIdx          int
+	executor           *TradeExecutor
+	storage            storage.Storage
+	userID             int64
+	interval           time.Duration
+	engine             *decision.Engine
+	advisoryEnabled    bool
+	autoExecuteEnabled bool
+	advisoryNotify     SniperNotifier
+	stopChan           chan struct{}
+	done               chan struct{}
 }
 
 func NewSignalMonitor(
@@ -174,19 +179,27 @@ func NewSignalMonitor(
 	stor storage.Storage,
 	userID int64,
 	interval time.Duration,
+	engine *decision.Engine,
+	advisoryEnabled, autoExecuteEnabled bool,
+	advisoryNotify SniperNotifier,
 ) *SignalMonitor {
 	if len(symbols) == 0 {
 		symbols = []string{"EURUSD", "BTCUSD"}
 	}
 	return &SignalMonitor{
-		symbols:  symbols,
-		rrRatio:  rrRatio,
-		executor: exec,
-		storage:  stor,
-		userID:   userID,
-		interval: interval,
-		stopChan: make(chan struct{}),
-		done:     make(chan struct{}),
+		symbols:            symbols,
+		rrRatio:            rrRatio,
+		symbolIdx:          0,
+		executor:           exec,
+		storage:            stor,
+		userID:             userID,
+		interval:           interval,
+		engine:             engine,
+		advisoryEnabled:    advisoryEnabled,
+		autoExecuteEnabled: autoExecuteEnabled,
+		advisoryNotify:     advisoryNotify,
+		stopChan:           make(chan struct{}),
+		done:               make(chan struct{}),
 	}
 }
 
@@ -209,8 +222,8 @@ func (sm *SignalMonitor) Start(ctx context.Context) {
 				logger.Info("Signal monitor stopped (manual)")
 				return
 			case <-ticker.C:
-				if err := sm.generateAndExecuteSignal(); err != nil {
-					logger.Error("Error in signal generation: %v", err)
+				if err := sm.evaluateDecision(ctx); err != nil {
+					logger.Error("Error in sniper decision: %v", err)
 				}
 			}
 		}
@@ -247,8 +260,8 @@ func (sm *SignalMonitor) generateAndExecuteSignal() error {
 	}
 
 	logger.Info(
-		"Signal generated for user %d: %s %s | strength=%.2f SL=%.5f TP=%.5f",
-		sm.userID, signal.Symbol, signal.Type, signal.Strength, signal.StopLoss, signal.TakeProfit,
+		"Signal generated for user %d: %s %s | strength=%.2f SL=%.5f TP=%.5f | reason=%s",
+		sm.userID, signal.Symbol, signal.Type, signal.Strength, signal.StopLoss, signal.TakeProfit, signal.Reason,
 	)
 
 	// Execute the signal

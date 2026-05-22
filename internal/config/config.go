@@ -63,6 +63,15 @@ type AppConfig struct {
 	SignalBroadcastSymbol       string
 	SignalSymbols               []string
 	SignalMinStrength           float64
+	// Real-time sniper decision support
+	DecisionEnabled         bool
+	DecisionIntervalSec     int
+	SniperMinConfidence     float64
+	SniperCooldownMin       int
+	DecisionAdvisory        bool
+	DecisionAutoExecute     bool
+	MarketDataAPIKey           string // optional Twelve Data for richer live + seed bars
+	AutoTradeRequiresApproval bool
 }
 
 func LoadConfig() (*Config, error) {
@@ -109,6 +118,14 @@ func LoadConfig() (*Config, error) {
 			SignalBroadcastIntervalSec: parseInt(getEnv("SIGNAL_BROADCAST_INTERVAL_SEC", "300")),
 			SignalBroadcastSymbol:      getEnv("SIGNAL_BROADCAST_SYMBOL", "EURUSD"),
 			SignalMinStrength:          parseFloat(getEnv("SIGNAL_MIN_STRENGTH", "0.7")),
+			DecisionEnabled:            getEnv("DECISION_ENABLED", "true") == "true",
+			DecisionIntervalSec:      parseInt(getEnv("DECISION_INTERVAL_SEC", "60")),
+			SniperMinConfidence:      parseFloat(getEnv("SNIPER_MIN_CONFIDENCE", "0.75")),
+			SniperCooldownMin:        parseInt(getEnv("SNIPER_COOLDOWN_MIN", "45")),
+			DecisionAdvisory:         parseDecisionAdvisory(getEnv("DECISION_MODE", "both")),
+			DecisionAutoExecute:      parseDecisionAuto(getEnv("DECISION_MODE", "both")),
+			MarketDataAPIKey:           getEnv("MARKET_DATA_API_KEY", ""),
+			AutoTradeRequiresApproval: getEnv("AUTO_TRADE_REQUIRES_APPROVAL", "false") == "true",
 		},
 	}
 	cfg.App.SignalSymbols = ParseSignalSymbols(
@@ -132,6 +149,17 @@ func (c *Config) Validate() error {
 	}
 	if c.Database.URL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
+	}
+	if c.App.Environment == "production" {
+		if len(c.App.WebAPIKey) < 16 {
+			return fmt.Errorf("WEB_API_KEY must be at least 16 characters in production")
+		}
+		if len(c.App.WebSessionSecret) < 16 {
+			return fmt.Errorf("WEB_SESSION_SECRET must be at least 16 characters in production")
+		}
+		if len(c.App.BrokerEncryptionKey) < 32 {
+			return fmt.Errorf("BROKER_ENCRYPTION_KEY must be at least 32 characters in production")
+		}
 	}
 	return nil
 }
@@ -175,6 +203,40 @@ func (c *Config) SessionTTL() time.Duration {
 		days = 365
 	}
 	return time.Duration(days) * 24 * time.Hour
+}
+
+func parseDecisionAdvisory(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "auto", "autostart", "execute":
+		return false
+	default:
+		return true
+	}
+}
+
+func parseDecisionAuto(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "advisory", "alert", "signals":
+		return false
+	default:
+		return true
+	}
+}
+
+func (c *Config) DecisionInterval() time.Duration {
+	sec := c.App.DecisionIntervalSec
+	if sec < 30 {
+		sec = 30
+	}
+	return time.Duration(sec) * time.Second
+}
+
+func (c *Config) SniperCooldown() time.Duration {
+	min := c.App.SniperCooldownMin
+	if min < 5 {
+		min = 45
+	}
+	return time.Duration(min) * time.Minute
 }
 
 func (c *Config) SignalBroadcastInterval() time.Duration {

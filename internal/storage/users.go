@@ -105,10 +105,12 @@ func (ps *PostgresStorage) GetUserStats() (*models.UserStats, error) {
 	return stats, nil
 }
 
-func (ps *PostgresStorage) ListAutoTradingUserIDs() ([]int64, error) {
-	rows, err := ps.db.Query(
-		`SELECT user_id FROM bot_states WHERE auto_trading_active = TRUE AND is_paused = FALSE AND daily_loss_hit = FALSE`,
-	)
+func (ps *PostgresStorage) ListAutoTradingUserIDs(requireApproval bool) ([]int64, error) {
+	q := `SELECT user_id FROM bot_states WHERE auto_trading_active = TRUE AND is_paused = FALSE AND daily_loss_hit = FALSE`
+	if requireApproval {
+		q += ` AND auto_trade_approved = TRUE`
+	}
+	rows, err := ps.db.Query(q)
 	if err != nil {
 		return nil, err
 	}

@@ -41,6 +41,8 @@ docker compose -p marketmamba logs -f app
 
 Same Telegram ID must be in `TELEGRAM_ADMIN_USER_IDS`. Commands: `/admin stats`, `/admin activate <id> <days>`.
 
+**Auto-trade (production):** set `SUBSCRIPTION_REQUIRED=true` and `AUTO_TRADE_REQUIRES_APPROVAL=true`, then `/approveauto <telegram_id>` before users can run `/auto on`.
+
 ## Access control (admin vs trader)
 
 | Role | How assigned | API |

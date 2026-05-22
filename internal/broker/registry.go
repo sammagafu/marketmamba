@@ -32,11 +32,11 @@ func SupportedBrokerTypes() []BrokerType {
 			ID:          "oanda",
 			Name:        "OANDA",
 			Description: "OANDA v20 REST API (practice or live).",
-			Status:      "coming_soon",
+			Status:      "live",
 			Fields: []Field{
 				{Key: "api_token", Label: "API Token", Type: "password", Required: true},
 				{Key: "account_id", Label: "Account ID", Type: "text", Required: true},
-				{Key: "practice", Label: "Practice account", Type: "boolean", Required: false},
+				{Key: "practice", Label: "Practice account (fxTrade Practice)", Type: "boolean", Required: false},
 			},
 		},
 		{
@@ -73,5 +73,10 @@ func SupportedBrokerTypes() []BrokerType {
 }
 
 func IsLiveProvider(provider string) bool {
-	return provider == "mock"
+	switch provider {
+	case "mock", "oanda":
+		return true
+	default:
+		return false
+	}
 }

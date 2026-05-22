@@ -32,10 +32,25 @@ func TestSaveConnectionMock(t *testing.T) {
 	}
 }
 
+func TestSaveConnectionOANDA(t *testing.T) {
+	store := &memConnStore{}
+	err := SaveConnection(store, "test-encryption-key-32bytes!!", 123, "oanda", "", Credentials{
+		"api_token":  "test-token",
+		"account_id": "101-001-1234567-001",
+		"practice":   "true",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.conn.Provider != "oanda" {
+		t.Fatalf("expected oanda, got %s", store.conn.Provider)
+	}
+}
+
 func TestSaveConnectionRejectsComingSoon(t *testing.T) {
 	store := &memConnStore{}
-	err := SaveConnection(store, "test-encryption-key-32bytes!!", 123, "oanda", "", Credentials{"api_token": "x", "account_id": "y"})
+	err := SaveConnection(store, "test-encryption-key-32bytes!!", 123, "metaapi", "", Credentials{"token": "x", "account_id": "y"})
 	if err == nil {
-		t.Fatal("expected error for oanda")
+		t.Fatal("expected error for metaapi")
 	}
 }

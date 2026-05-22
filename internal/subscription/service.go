@@ -19,6 +19,25 @@ func NewService(store *storage.PostgresStorage, cfg *config.Config) *Service {
 	return &Service{store: store, cfg: cfg}
 }
 
+// CanAutoTrade checks subscription and optional admin approval for /autostart execution.
+func (s *Service) CanAutoTrade(userID int64, isAdmin bool) (bool, string) {
+	ok, msg := s.CanTrade(userID)
+	if !ok {
+		return false, msg
+	}
+	if !s.cfg.App.AutoTradeRequiresApproval || isAdmin {
+		return true, ""
+	}
+	state, err := s.store.GetBotState(userID)
+	if err != nil || state == nil {
+		return false, "bot state not found — use /start first"
+	}
+	if !state.AutoTradeApproved {
+		return false, "auto-trade pending admin approval — contact support or wait for /approveauto"
+	}
+	return true, ""
+}
+
 func (s *Service) CanTrade(userID int64) (bool, string) {
 	if !s.cfg.App.SubscriptionRequired {
 		return true, ""

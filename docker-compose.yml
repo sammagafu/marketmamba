@@ -45,6 +45,14 @@ services:
       SIGNAL_BROADCAST_SYMBOL: ${SIGNAL_BROADCAST_SYMBOL:-EURUSD}
       SIGNAL_BROADCAST_SYMBOLS: ${SIGNAL_BROADCAST_SYMBOLS:-EURUSD,BTCUSD}
       SIGNAL_MIN_STRENGTH: ${SIGNAL_MIN_STRENGTH:-0.7}
+      DECISION_ENABLED: ${DECISION_ENABLED:-true}
+      DECISION_INTERVAL_SEC: ${DECISION_INTERVAL_SEC:-60}
+      SNIPER_MIN_CONFIDENCE: ${SNIPER_MIN_CONFIDENCE:-0.75}
+      SNIPER_COOLDOWN_MIN: ${SNIPER_COOLDOWN_MIN:-45}
+      DECISION_MODE: ${DECISION_MODE:-both}
+      MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY:-}
+      AUTO_TRADE_REQUIRES_APPROVAL: ${AUTO_TRADE_REQUIRES_APPROVAL:-false}
+      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED:-false}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-market_mamba_bot}
       TELEGRAM_BOT_CLIENT_ID: ${TELEGRAM_BOT_CLIENT_ID:-}
       TELEGRAM_LOGIN_DOMAIN: ${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}
@@ -64,10 +72,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
     networks:
       - forexbot-network
     restart: unless-stopped
 
+  # Optional: use host nginx on 80/443 instead (see VPS_DEPLOY.md) — do not run both
   caddy:
     image: caddy:2-alpine
     container_name: marketmamba-caddy

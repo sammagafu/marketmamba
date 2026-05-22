@@ -1,14 +1,17 @@
 package trading
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
+	"forex-bot/internal/accounts"
 	"forex-bot/internal/broker"
+	"forex-bot/internal/feedback"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
-	"forex-bot/internal/feedback"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/utils"
 )
@@ -59,10 +62,9 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 		return nil, fmt.Errorf("daily loss limit already hit")
 	}
 
-	// Get account info
-	account, err := te.storage.GetAccountByUser(te.userID)
+	account, err := te.ensureAccount()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get account: %w", err)
+		return nil, err
 	}
 
 	// Get open positions
@@ -124,15 +126,21 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 	}
 
 	position.UserID = te.userID
+	source := autoTradeSource(signal)
 	if te.tradeLog != nil {
-		if _, err := te.tradeLog.RecordOpen(te.userID, position, "AUTO"); err != nil {
+		if _, err := te.tradeLog.RecordOpen(te.userID, position, source); err != nil {
 			logger.Error("Failed to log trade open: %v", err)
 		}
 	}
 
-	te.logCommand("AUTO_TRADE", fmt.Sprintf("%s %s %.2f", signal.Symbol, signal.Type, position.Quantity), "SUCCESS", "Trade executed")
+	reasonMsg := tradeReasonSummary(signal, lotSize, account.Balance)
+	te.logCommand("AUTO_TRADE", fmt.Sprintf("%s %s %.2f", signal.Symbol, signal.Type, position.Quantity), "SUCCESS", reasonMsg)
 
-	logger.Info("Trade executed for user %d: %s %s @ %.5f (SL: %.5f TP: %.5f)", te.userID, signal.Symbol, signal.Type, position.EntryPrice, signal.StopLoss, signal.TakeProfit)
+	logger.Info(
+		"Trade taken for user %d: %s %s @ %.5f | %s | qty=%.2f SL=%.5f TP=%.5f",
+		te.userID, signal.Symbol, signal.Type, position.EntryPrice, reasonMsg,
+		position.Quantity, signal.StopLoss, signal.TakeProfit,
+	)
 
 	return position, nil
 }
@@ -228,14 +236,14 @@ func (te *TradeExecutor) updateDailyStats(trade *models.Trade) {
 		logger.Error("Failed to update daily stats: %v", err)
 	}
 
-	// Check if daily loss limit hit
-	if stats.NetProfit < 0 && stats.TotalLoss > 0 {
-		maxLoss := 0.02 // Should read from config
-		if stats.TotalLoss > maxLoss {
+	// Check if daily loss limit hit (uses MAX_DAILY_LOSS from risk settings)
+	if account, accErr := te.storage.GetAccountByUser(te.userID); accErr == nil && account != nil {
+		maxLoss := te.validator.MaxDailyLossAmount(account.Balance)
+		if maxLoss > 0 && stats.TotalLoss-stats.TotalProfit > maxLoss {
 			if err := te.storage.UpdateBotState(te.userID, true, false, true); err != nil {
 				logger.Error("Failed to update bot state: %v", err)
 			}
-			logger.Warn("Daily loss limit hit for user %d", te.userID)
+			logger.Warn("Daily loss limit hit for user %d (loss %.2f > max %.2f)", te.userID, stats.TotalLoss-stats.TotalProfit, maxLoss)
 		}
 	}
 }
@@ -257,6 +265,64 @@ func (te *TradeExecutor) logCommand(command, args, status, message string) {
 }
 
 // Helper functions
+func (te *TradeExecutor) ensureAccount() (*models.Account, error) {
+	account, err := te.storage.GetAccountByUser(te.userID)
+	if err == nil {
+		return account, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to get account: %w", err)
+	}
+
+	provider := "mock"
+	if ps, ok := te.storage.(*storage.PostgresStorage); ok {
+		if conn, connErr := ps.GetActiveBrokerConnection(te.userID); connErr == nil && conn != nil {
+			provider = conn.Provider
+		}
+	}
+	acctStore := accountStore(te.storage)
+	if acctStore == nil {
+		return nil, fmt.Errorf("failed to sync account: storage unavailable")
+	}
+	if syncErr := accounts.SyncFromBroker(acctStore, te.userID, provider, te.broker); syncErr != nil {
+		return nil, fmt.Errorf("failed to sync account: %w", syncErr)
+	}
+	account, err = te.storage.GetAccountByUser(te.userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get account after sync: %w", err)
+	}
+	logger.Info("Synced trading account for user %d (provider=%s balance=%.2f)", te.userID, provider, account.Balance)
+	return account, nil
+}
+
+func accountStore(s storage.Storage) accounts.AccountStore {
+	if a, ok := s.(accounts.AccountStore); ok {
+		return a
+	}
+	return nil
+}
+
+func autoTradeSource(signal *models.TradeSignal) string {
+	if signal == nil || signal.Reason == "" {
+		return "AUTO"
+	}
+	return "AUTO: " + signal.Reason
+}
+
+func tradeReasonSummary(signal *models.TradeSignal, lotSize, balance float64) string {
+	if signal == nil {
+		return "auto-trade"
+	}
+	reason := signal.Reason
+	if reason == "" {
+		reason = "signal filters passed"
+	}
+	return fmt.Sprintf(
+		"%s | lot=%.2f balance=%.2f strength=%.0f%% R:R=%.2f",
+		reason, lotSize, balance, signal.Strength*100, signal.RiskRewardRatio,
+	)
+}
+
 func shouldCloseTakeProfit(pos *models.Position) bool {
 	if pos.CurrentPrice <= 0 || pos.TakeProfit <= 0 {
 		return false

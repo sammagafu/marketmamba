@@ -82,7 +82,11 @@ function onProviderChange() {
   dynamicFields.value = selectedBroker.value?.fields || []
   const next = {}
   for (const f of dynamicFields.value) {
-    next[f.key] = credentials.value[f.key] ?? ''
+    if (f.type === 'boolean') {
+      next[f.key] = credentials.value[f.key] === 'true' ? 'true' : 'false'
+    } else {
+      next[f.key] = credentials.value[f.key] ?? ''
+    }
   }
   credentials.value = next
 }
@@ -453,7 +457,15 @@ onMounted(async () => {
       </div>
       <div v-for="f in dynamicFields" :key="f.key" class="field">
         <label>{{ f.label }}</label>
-        <input v-model="credentials[f.key]" :type="f.type === 'password' ? 'password' : 'text'" />
+        <label v-if="f.type === 'boolean'" class="checkbox-row">
+          <input
+            type="checkbox"
+            :checked="credentials[f.key] === 'true'"
+            @change="credentials[f.key] = $event.target.checked ? 'true' : 'false'"
+          />
+          <span>Enabled</span>
+        </label>
+        <input v-else v-model="credentials[f.key]" :type="f.type === 'password' ? 'password' : 'text'" />
       </div>
       <div class="broker-actions">
         <button type="button" class="btn-secondary" :disabled="!brokerIsLive" @click="testBroker">Test</button>

@@ -3,16 +3,34 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"forex-bot/internal/config"
 )
 
 func TestStaticAssetsRoute(t *testing.T) {
-	cfg := &config.Config{App: config.AppConfig{EnableWeb: true}}
-	s := NewServer(cfg, nil, nil, nil, nil, nil, nil)
+	entries, err := os.ReadDir(filepath.Join("web", "dist", "assets"))
+	if err != nil {
+		t.Skip("web/dist/assets not built — run make web-build")
+	}
+	var cssName string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".css") {
+			cssName = e.Name()
+			break
+		}
+	}
+	if cssName == "" {
+		t.Skip("no CSS bundle in web/dist/assets")
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/assets/index-BVvY9Vuq.css", nil)
+	cfg := &config.Config{App: config.AppConfig{EnableWeb: true}}
+	s := NewServer(cfg, nil, nil, nil, nil, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/assets/"+cssName, nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 
