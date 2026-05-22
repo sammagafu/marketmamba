@@ -2,6 +2,7 @@ package trading
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"forex-bot/internal/logger"
@@ -41,13 +42,12 @@ func (sg *SignalGenerator) GenerateSignal(
 	if spread < 0 {
 		spread = -spread
 	}
-	maxSpread := currentPrice * 0.0003 // ~3 pips on EURUSD
+	maxSpread := maxSpreadForSymbol(sg.symbol, currentPrice)
 
-	// Spread filter: reject if spread is too large (more than 3 pips)
 	if spread > maxSpread {
 		logger.Debug(
-			"[%s] Signal rejected: spread %.5f (%.1f pips) > max %.5f (%.1f pips) | bid=%.5f ask=%.5f price=%.5f",
-			sg.symbol, spread, spreadToPips(spread), maxSpread, spreadToPips(maxSpread), bid, ask, currentPrice,
+			"[%s] Signal rejected: spread %.5f (%.1f units) > max %.5f (%.1f) | bid=%.5f ask=%.5f price=%.5f",
+			sg.symbol, spread, spreadUnits(sg.symbol, spread), maxSpread, spreadUnits(sg.symbol, maxSpread), bid, ask, currentPrice,
 		)
 		return nil
 	}
@@ -86,8 +86,8 @@ func (sg *SignalGenerator) GenerateSignal(
 	}
 
 	logger.Info(
-		"[%s] Signal passed filters | %s spread=%.5f (%.1f pips, max %.1f) bid=%.5f ask=%.5f strength=%.2f",
-		sg.symbol, signal.Type, spread, spreadToPips(spread), spreadToPips(maxSpread), bid, ask, signal.Strength,
+		"[%s] Signal passed filters | %s spread=%.5f (%.1f units, max %.1f) bid=%.5f ask=%.5f strength=%.2f",
+		sg.symbol, signal.Type, spread, spreadUnits(sg.symbol, spread), spreadUnits(sg.symbol, maxSpread), bid, ask, signal.Strength,
 	)
 	return signal
 }
@@ -314,13 +314,48 @@ func CalculateRSI(prices []float64, period int) float64 {
 // SimulateScalpingOpportunity creates a realistic scalping signal for testing
 func SimulateScalpingOpportunity(symbol string, opportunityType string) *models.TradeSignal {
 	sg := NewSignalGenerator(symbol, 0.7, 2.0)
+	currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask, ok := marketSnapshot(symbol, opportunityType)
+	if !ok {
+		return nil
+	}
+	return sg.GenerateSignal(currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask)
+}
 
-	var currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask float64
+func marketSnapshot(symbol, opportunityType string) (currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask float64, ok bool) {
+	if strings.Contains(strings.ToUpper(symbol), "BTC") {
+		switch opportunityType {
+		case "UPTREND_SCALP":
+			currentPrice = 65000.0
+			atr = 180.0
+			ema20 = 64920.0
+			ema50 = 64600.0
+			ema200 = 63800.0
+			rsi = 55
+		case "DOWNTREND_SCALP":
+			currentPrice = 64200.0
+			atr = 175.0
+			ema20 = 64280.0
+			ema50 = 64550.0
+			ema200 = 65200.0
+			rsi = 45
+		case "TREND_CONFIRMATION":
+			currentPrice = 65500.0
+			atr = 200.0
+			ema20 = 65400.0
+			ema50 = 65100.0
+			ema200 = 64500.0
+			rsi = 58
+		default:
+			return 0, 0, 0, 0, 0, 0, 0, 0, false
+		}
+		spread := currentPrice * 0.00002
+		bid = currentPrice - spread/2
+		ask = currentPrice + spread/2
+		return currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask, true
+	}
 
-	// Simulate different market conditions
 	switch opportunityType {
 	case "UPTREND_SCALP":
-		// Strong uptrend with pullback
 		currentPrice = 1.1050
 		atr = 0.0035
 		ema20 = 1.1045
@@ -329,9 +364,7 @@ func SimulateScalpingOpportunity(symbol string, opportunityType string) *models.
 		rsi = 55
 		bid = 1.10495
 		ask = 1.10505
-
 	case "DOWNTREND_SCALP":
-		// Strong downtrend with pullback
 		currentPrice = 1.0950
 		atr = 0.0035
 		ema20 = 1.0955
@@ -340,9 +373,7 @@ func SimulateScalpingOpportunity(symbol string, opportunityType string) *models.
 		rsi = 45
 		bid = 1.09495
 		ask = 1.09505
-
 	case "TREND_CONFIRMATION":
-		// Clean trend following setup
 		currentPrice = 1.1055
 		atr = 0.0040
 		ema20 = 1.1050
@@ -351,15 +382,26 @@ func SimulateScalpingOpportunity(symbol string, opportunityType string) *models.
 		rsi = 60
 		bid = 1.10545
 		ask = 1.10555
-
 	default:
-		return nil
+		return 0, 0, 0, 0, 0, 0, 0, 0, false
 	}
-
-	return sg.GenerateSignal(currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask)
+	return currentPrice, atr, ema20, ema50, ema200, rsi, bid, ask, true
 }
 
-// spreadToPips converts price spread to approximate pips (5-digit FX quote).
-func spreadToPips(spread float64) float64 {
+func maxSpreadForSymbol(symbol string, currentPrice float64) float64 {
+	s := strings.ToUpper(symbol)
+	if strings.Contains(s, "BTC") {
+		return currentPrice * 0.00025
+	}
+	if strings.Contains(s, "XAU") || strings.Contains(s, "GOLD") {
+		return currentPrice * 0.0002
+	}
+	return currentPrice * 0.0003
+}
+
+func spreadUnits(symbol string, spread float64) float64 {
+	if strings.Contains(strings.ToUpper(symbol), "BTC") {
+		return spread
+	}
 	return spread / 0.0001
 }

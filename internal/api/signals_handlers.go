@@ -43,8 +43,17 @@ func (s *Server) handleAdminBroadcastSignal(w http.ResponseWriter, r *http.Reque
 	var qualErr error
 
 	if req.Generate || (req.Symbol == "" && req.Type == "") {
-		signal, qualErr = signals.GenerateQualified(symbol, minStrength, 0, s.riskValidator)
-		if qualErr != nil && !req.Force {
+		if symbol == "" {
+			for _, sym := range s.cfg.SignalSymbols() {
+				signal, qualErr = signals.GenerateQualified(sym, minStrength, 0, s.riskValidator)
+				if qualErr == nil {
+					break
+				}
+			}
+		} else {
+			signal, qualErr = signals.GenerateQualified(symbol, minStrength, 0, s.riskValidator)
+		}
+		if qualErr != nil && signal == nil && !req.Force {
 			writeError(w, http.StatusBadRequest, qualErr.Error())
 			return
 		}

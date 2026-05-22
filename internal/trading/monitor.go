@@ -154,9 +154,11 @@ func (pm *PositionMonitor) simulatePrice(pos *models.Position) float64 {
 	return pos.EntryPrice + movement_price
 }
 
-// SignalMonitor continuously generates and executes trading signals
+// SignalMonitor continuously generates and executes trading signals across symbols.
 type SignalMonitor struct {
-	generator *SignalGenerator
+	symbols   []string
+	rrRatio   float64
+	symbolIdx int
 	executor  *TradeExecutor
 	storage   storage.Storage
 	userID    int64
@@ -166,20 +168,25 @@ type SignalMonitor struct {
 }
 
 func NewSignalMonitor(
-	gen *SignalGenerator,
+	symbols []string,
+	rrRatio float64,
 	exec *TradeExecutor,
 	stor storage.Storage,
 	userID int64,
 	interval time.Duration,
 ) *SignalMonitor {
+	if len(symbols) == 0 {
+		symbols = []string{"EURUSD", "BTCUSD"}
+	}
 	return &SignalMonitor{
-		generator: gen,
-		executor:  exec,
-		storage:   stor,
-		userID:    userID,
-		interval:  interval,
-		stopChan:  make(chan struct{}),
-		done:      make(chan struct{}),
+		symbols:  symbols,
+		rrRatio:  rrRatio,
+		executor: exec,
+		storage:  stor,
+		userID:   userID,
+		interval: interval,
+		stopChan: make(chan struct{}),
+		done:     make(chan struct{}),
 	}
 }
 
@@ -261,13 +268,17 @@ func (sm *SignalMonitor) generateAndExecuteSignal() error {
 }
 
 func (sm *SignalMonitor) generateSignal() *models.TradeSignal {
-	// In production, you would get real market data here
-	// For testing, use simulated data
-
-	// Randomly select a signal type for variety
 	opportunityTypes := []string{"UPTREND_SCALP", "DOWNTREND_SCALP", "TREND_CONFIRMATION"}
-	idx := int(time.Now().UnixNano() % 3)
+	oppIdx := int(time.Now().UnixNano() % 3)
 
-	signal := SimulateScalpingOpportunity(sm.generator.symbol, opportunityTypes[idx])
-	return signal
+	for i := 0; i < len(sm.symbols); i++ {
+		sym := sm.symbols[(sm.symbolIdx+i)%len(sm.symbols)]
+		signal := SimulateScalpingOpportunity(sym, opportunityTypes[oppIdx])
+		if signal != nil {
+			sm.symbolIdx = (sm.symbolIdx + i + 1) % len(sm.symbols)
+			return signal
+		}
+	}
+	sm.symbolIdx = (sm.symbolIdx + 1) % len(sm.symbols)
+	return nil
 }

@@ -8,27 +8,30 @@ import (
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
+	"forex-bot/internal/feedback"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/utils"
 )
 
 // TradeExecutor handles automated trade execution
 type TradeExecutor struct {
-	broker     broker.Broker
-	storage    storage.Storage
-	tradeLog   *TradeLog
-	validator  *risk.RiskValidator
-	userID     int64
-	maxRetries int
+	broker          broker.Broker
+	storage         storage.Storage
+	tradeLog        *TradeLog
+	validator       *risk.RiskValidator
+	outcomeNotifier feedback.OutcomeNotifier
+	userID          int64
+	maxRetries      int
 }
 
-func NewTradeExecutor(b broker.Broker, s storage.Storage, v *risk.RiskValidator, userID int64) *TradeExecutor {
+func NewTradeExecutor(b broker.Broker, s storage.Storage, v *risk.RiskValidator, userID int64, notifier feedback.OutcomeNotifier) *TradeExecutor {
 	te := &TradeExecutor{
-		broker:     b,
-		storage:    s,
-		validator:  v,
-		userID:     userID,
-		maxRetries: 3,
+		broker:          b,
+		storage:         s,
+		validator:       v,
+		outcomeNotifier: notifier,
+		userID:          userID,
+		maxRetries:      3,
 	}
 	if ps, ok := s.(*storage.PostgresStorage); ok {
 		te.tradeLog = NewTradeLog(ps)
@@ -171,17 +174,29 @@ func (te *TradeExecutor) closePosition(pos *models.Position, reason string) erro
 	if exitPrice <= 0 {
 		exitPrice = pos.EntryPrice
 	}
+	var closed *models.Trade
 	if te.tradeLog != nil {
 		if trade, err := te.tradeLog.RecordClose(te.userID, pos.ID, exitPrice, reason); err != nil {
 			logger.Warn("Trade close log failed for %s: %v", pos.ID, err)
 		} else if trade != nil {
+			closed = trade
 			te.updateDailyStats(trade)
 		}
 	}
 
+	te.notifyOutcome(closed, reason)
 	te.logCommand("AUTO_CLOSE", pos.ID, "SUCCESS", fmt.Sprintf("Position closed at %s", reason))
 
 	return nil
+}
+
+func (te *TradeExecutor) notifyOutcome(trade *models.Trade, reason string) {
+	if te.outcomeNotifier == nil || trade == nil {
+		return
+	}
+	if err := te.outcomeNotifier.NotifyTradeOutcome(te.userID, trade, reason); err != nil {
+		logger.Warn("Trade outcome notify user %d: %v", te.userID, err)
+	}
 }
 
 func (te *TradeExecutor) updateDailyStats(trade *models.Trade) {

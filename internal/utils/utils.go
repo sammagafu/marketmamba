@@ -42,6 +42,7 @@ func IsValidSymbol(symbol string) bool {
 	validSymbols := []string{
 		"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD",
 		"EURJPY", "EURGBP", "GBPJPY", "CHFJPY",
+		"BTCUSD", "XAUUSD",
 	}
 
 	for _, valid := range validSymbols {

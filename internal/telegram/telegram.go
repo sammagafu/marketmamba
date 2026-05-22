@@ -10,6 +10,7 @@ import (
 
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/feedback"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
@@ -21,13 +22,14 @@ import (
 type BrokerResolver func(userID int64) (broker.Broker, error)
 
 type TelegramBot struct {
-	api           *tgbotapi.BotAPI
-	cfg           *config.Config
-	storage       storage.Storage
-	validator     *risk.RiskValidator
-	users         *users.Service
-	subs          *subscription.Service
-	resolveBroker BrokerResolver
+	api              *tgbotapi.BotAPI
+	cfg              *config.Config
+	storage          storage.Storage
+	validator        *risk.RiskValidator
+	users            *users.Service
+	subs             *subscription.Service
+	resolveBroker    BrokerResolver
+	outcomeNotifier  feedback.OutcomeNotifier
 }
 
 func NewTelegramBot(
@@ -51,6 +53,18 @@ func NewTelegramBot(
 		subs:          sub,
 		resolveBroker: brokerResolver,
 	}, nil
+}
+
+// SetOutcomeNotifier wires TP/SL feedback (trader + signal subscribers).
+func (tb *TelegramBot) SetOutcomeNotifier(n feedback.OutcomeNotifier) {
+	tb.outcomeNotifier = n
+}
+
+func (tb *TelegramBot) outcomes() feedback.OutcomeNotifier {
+	if tb.outcomeNotifier != nil {
+		return tb.outcomeNotifier
+	}
+	return tb
 }
 
 func (tb *TelegramBot) Start() error {
@@ -414,7 +428,7 @@ func (tb *TelegramBot) handleClose(chatID int64, userID int64, args []string) {
 		tb.sendMessage(chatID, fmt.Sprintf("❌ %v", err))
 		return
 	}
-	if err := tb.logTradeClose(userID, posID, exitPrice, "MANUAL"); err != nil {
+	if _, err := tb.logTradeClose(userID, posID, exitPrice, "MANUAL"); err != nil {
 		tb.sendMessage(chatID, "✅ Closed on broker\n⚠️ Log failed: "+err.Error())
 		return
 	}
@@ -437,7 +451,9 @@ func (tb *TelegramBot) handleCloseAll(chatID int64, userID int64) {
 		if exit <= 0 {
 			exit = pos.EntryPrice
 		}
-		_ = tb.logTradeClose(userID, pos.ID, exit, "MANUAL")
+		if _, err := tb.logTradeClose(userID, pos.ID, exit, "MANUAL"); err != nil {
+			logger.Error("logTradeClose %s: %v", pos.ID, err)
+		}
 	}
 	tb.sendMessage(chatID, "✅ All positions closed & logged")
 }

@@ -2,7 +2,9 @@ package telegram
 
 import (
 	"fmt"
+	"strings"
 
+	"forex-bot/internal/models"
 	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
 )
@@ -13,13 +15,25 @@ func (tb *TelegramBot) handleAdminSignal(chatID int64) {
 		tb.sendMessage(chatID, "❌ internal error")
 		return
 	}
-	symbol := tb.cfg.App.SignalBroadcastSymbol
-	if symbol == "" {
-		symbol = "EURUSD"
+	symbols := tb.cfg.SignalSymbols()
+	var sig *models.TradeSignal
+	var lastErr error
+	for _, symbol := range symbols {
+		s, err := signals.GenerateQualified(symbol, tb.cfg.App.SignalMinStrength, 0, tb.validator)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		sig = s
+		break
 	}
-	sig, err := signals.GenerateQualified(symbol, tb.cfg.App.SignalMinStrength, 0, tb.validator)
-	if err != nil {
-		tb.sendMessage(chatID, "⏭️ No broadcast — signal did not meet requirements:\n"+err.Error())
+	if sig == nil {
+		msg := "⏭️ No broadcast — no symbol met requirements"
+		if lastErr != nil {
+			msg += ":\n" + lastErr.Error()
+		}
+		msg += "\nChecked: " + strings.Join(symbols, ", ")
+		tb.sendMessage(chatID, msg)
 		return
 	}
 	n, err := signals.PublishManual(ps, tb.subs, tb, tb.validator, tb.cfg.App.SignalMinStrength, sig, false)
@@ -28,7 +42,7 @@ func (tb *TelegramBot) handleAdminSignal(chatID int64) {
 		return
 	}
 	if n == 0 {
-		tb.sendMessage(chatID, "✅ Signal qualified but no eligible subscribers online")
+		tb.sendMessage(chatID, "✅ Signal qualified but no eligible subscribers")
 		return
 	}
 	tb.sendMessage(chatID, fmt.Sprintf("✅ Signal sent to *%d* subscribers\n%s %s (strength %.0f%%)",

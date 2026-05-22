@@ -13,8 +13,8 @@ const props = defineProps({
 
 defineEmits(['error'])
 
-const tickers = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD', 'USDCAD']
-const featuredPair = 'EURUSD'
+const tickers = ['BTCUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD']
+const featuredPair = 'BTCUSD'
 const headlineWord = ref(0)
 const words = ['precision', 'signals', 'automation', 'discipline']
 const displayTrades = ref(0)

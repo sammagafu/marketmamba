@@ -30,6 +30,7 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"telegram_login_enabled": s.cfg.Telegram.BotToken != "",
 		"session_ttl_days":       s.cfg.App.WebSessionTTLDays,
 		"signal_broadcast":       s.cfg.App.SignalBroadcastEnabled,
+		"signal_symbols":         s.cfg.SignalSymbols(),
 	}
 	if stats, err := s.storage.GetUserStats(); err == nil && stats != nil {
 		payload["total_trades"] = stats.TotalTrades

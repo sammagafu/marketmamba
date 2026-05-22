@@ -69,7 +69,7 @@ type Publisher struct {
 	subs        *subscription.Service
 	notifier    Notifier
 	validator   *risk.RiskValidator
-	symbol      string
+	symbols     []string
 	interval    time.Duration
 	minStrength float64
 }
@@ -79,12 +79,12 @@ func NewPublisher(
 	subs *subscription.Service,
 	notifier Notifier,
 	validator *risk.RiskValidator,
-	symbol string,
+	symbols []string,
 	interval time.Duration,
 	minStrength float64,
 ) *Publisher {
-	if symbol == "" {
-		symbol = "EURUSD"
+	if len(symbols) == 0 {
+		symbols = []string{"EURUSD", "BTCUSD"}
 	}
 	if interval <= 0 {
 		interval = 5 * time.Minute
@@ -94,7 +94,7 @@ func NewPublisher(
 	}
 	return &Publisher{
 		store: store, subs: subs, notifier: notifier, validator: validator,
-		symbol: symbol, interval: interval, minStrength: minStrength,
+		symbols: symbols, interval: interval, minStrength: minStrength,
 	}
 }
 
@@ -105,7 +105,7 @@ func (p *Publisher) Start(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(p.interval)
 		defer ticker.Stop()
-		logger.Info("Signal broadcast publisher started (interval %v, symbol %s, min strength %.2f)", p.interval, p.symbol, p.minStrength)
+		logger.Info("Signal broadcast publisher started (interval %v, symbols %v, min strength %.2f)", p.interval, p.symbols, p.minStrength)
 		for {
 			select {
 			case <-ctx.Done():
@@ -119,19 +119,21 @@ func (p *Publisher) Start(ctx context.Context) {
 }
 
 func (p *Publisher) publishOnce() {
-	signal, err := GenerateQualified(p.symbol, p.minStrength, 0, p.validator)
-	if err != nil {
-		logger.Debug("Signal broadcast skipped: %v", err)
-		return
-	}
-	n, err := Broadcast(p.store, p.subs, p.notifier, signal)
-	if err != nil {
-		logger.Error("Signal broadcast: %v", err)
-		return
-	}
-	if n > 0 {
-		logger.Info("Signal broadcast %s %s (strength %.2f, R:R %.2f) → %d subscribers",
-			signal.Symbol, signal.Type, signal.Strength, signal.RiskRewardRatio, n)
+	for _, symbol := range p.symbols {
+		signal, err := GenerateQualified(symbol, p.minStrength, 0, p.validator)
+		if err != nil {
+			logger.Debug("Signal broadcast skipped %s: %v", symbol, err)
+			continue
+		}
+		n, err := Broadcast(p.store, p.subs, p.notifier, signal)
+		if err != nil {
+			logger.Error("Signal broadcast %s: %v", symbol, err)
+			continue
+		}
+		if n > 0 {
+			logger.Info("Signal broadcast %s %s (strength %.2f, R:R %.2f) → %d subscribers",
+				signal.Symbol, signal.Type, signal.Strength, signal.RiskRewardRatio, n)
+		}
 	}
 }
 

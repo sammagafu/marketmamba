@@ -9,6 +9,7 @@ import (
 	"forex-bot/internal/config"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/risk"
+	"forex-bot/internal/feedback"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
 )
@@ -22,25 +23,34 @@ type userRunner struct {
 }
 
 type Coordinator struct {
-	store    *storage.PostgresStorage
-	cfg      *config.Config
-	subs     *subscription.Service
-	validator *risk.RiskValidator
-	resolve  BrokerResolver
-	mu       sync.Mutex
-	runners  map[int64]*userRunner
-	interval time.Duration
+	store           *storage.PostgresStorage
+	cfg             *config.Config
+	subs            *subscription.Service
+	validator       *risk.RiskValidator
+	outcomeNotifier feedback.OutcomeNotifier
+	resolve         BrokerResolver
+	mu              sync.Mutex
+	runners         map[int64]*userRunner
+	interval        time.Duration
 }
 
-func NewCoordinator(store *storage.PostgresStorage, cfg *config.Config, subs *subscription.Service, v *risk.RiskValidator, resolve BrokerResolver) *Coordinator {
+func NewCoordinator(
+	store *storage.PostgresStorage,
+	cfg *config.Config,
+	subs *subscription.Service,
+	v *risk.RiskValidator,
+	resolve BrokerResolver,
+	outcomeNotifier feedback.OutcomeNotifier,
+) *Coordinator {
 	return &Coordinator{
-		store:     store,
-		cfg:       cfg,
-		subs:      subs,
-		validator: v,
-		resolve:   resolve,
-		runners:   make(map[int64]*userRunner),
-		interval:  15 * time.Second,
+		store:           store,
+		cfg:             cfg,
+		subs:            subs,
+		validator:       v,
+		outcomeNotifier: outcomeNotifier,
+		resolve:         resolve,
+		runners:         make(map[int64]*userRunner),
+		interval:        15 * time.Second,
 	}
 }
 
@@ -104,10 +114,9 @@ func (c *Coordinator) ensureRunner(ctx context.Context, userID int64) {
 		return
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	executor := NewTradeExecutor(b, c.store, c.validator, userID)
+	executor := NewTradeExecutor(b, c.store, c.validator, userID, c.outcomeNotifier)
 	posMonitor := NewPositionMonitor(b, c.store, userID, 5*time.Second)
-	sigGen := NewSignalGenerator("EURUSD", 0.7, c.cfg.Risk.RiskRewardRatio)
-	sigMonitor := NewSignalMonitor(sigGen, executor, c.store, userID, 10*time.Second)
+	sigMonitor := NewSignalMonitor(c.cfg.SignalSymbols(), c.cfg.Risk.RiskRewardRatio, executor, c.store, userID, 10*time.Second)
 	posMonitor.Start(runCtx, executor)
 	sigMonitor.Start(runCtx)
 

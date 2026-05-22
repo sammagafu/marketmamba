@@ -56,11 +56,15 @@ func (tb *TelegramBot) logTradeOpen(userID int64, pos *models.Position, source s
 	return err
 }
 
-func (tb *TelegramBot) logTradeClose(userID int64, brokerPosID string, exitPrice float64, reason string) error {
+func (tb *TelegramBot) logTradeClose(userID int64, brokerPosID string, exitPrice float64, reason string) (*models.Trade, error) {
 	tl := tb.tradeLog()
 	if tl == nil {
-		return nil
+		return nil, nil
 	}
-	_, err := tl.RecordClose(userID, brokerPosID, exitPrice, reason)
-	return err
+	trade, err := tl.RecordClose(userID, brokerPosID, exitPrice, reason)
+	if err != nil {
+		return nil, err
+	}
+	_ = tb.outcomes().NotifyTradeOutcome(userID, trade, reason)
+	return trade, nil
 }

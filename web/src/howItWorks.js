@@ -95,7 +95,7 @@ export const SIGNAL_SOURCES = [
   {
     title: 'Qualified Telegram signals',
     body:
-      'Admins can broadcast setups that pass the same technical and risk checks. Subscribers see symbol, side, SL, TP, and strength in Telegram.',
+      'Admins can broadcast setups on EURUSD, BTCUSD, and more. Subscribers get TP/SL outcome updates when those levels hit.',
   },
   {
     title: 'Your broker, your book',

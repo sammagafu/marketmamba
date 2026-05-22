@@ -61,6 +61,7 @@ type AppConfig struct {
 	SignalBroadcastEnabled      bool
 	SignalBroadcastIntervalSec  int
 	SignalBroadcastSymbol       string
+	SignalSymbols               []string
 	SignalMinStrength           float64
 }
 
@@ -110,6 +111,10 @@ func LoadConfig() (*Config, error) {
 			SignalMinStrength:          parseFloat(getEnv("SIGNAL_MIN_STRENGTH", "0.7")),
 		},
 	}
+	cfg.App.SignalSymbols = ParseSignalSymbols(
+		getEnv("SIGNAL_BROADCAST_SYMBOLS", "EURUSD,BTCUSD"),
+		cfg.App.SignalBroadcastSymbol,
+	)
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err

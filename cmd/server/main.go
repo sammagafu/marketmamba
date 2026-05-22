@@ -14,6 +14,7 @@ import (
 	"forex-bot/internal/api"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/feedback"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
@@ -84,16 +85,19 @@ func main() {
 		log.Fatalf("Telegram bot initialization failed: %v", err)
 	}
 
+	outcomeSvc := feedback.NewService(tgBot, db, subs, cfg.SignalSymbols())
+	tgBot.SetOutcomeNotifier(outcomeSvc)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker)
+	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker, outcomeSvc)
 	coordinator.Start(ctx)
 
 	if cfg.App.SignalBroadcastEnabled {
 		pub := signals.NewPublisher(
 			db, subs, tgBot, validator,
-			cfg.App.SignalBroadcastSymbol, cfg.SignalBroadcastInterval(),
+			cfg.SignalSymbols(), cfg.SignalBroadcastInterval(),
 			cfg.App.SignalMinStrength,
 		)
 		pub.Start(ctx)
