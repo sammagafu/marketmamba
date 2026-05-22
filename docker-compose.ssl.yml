@@ -1,0 +1,35 @@
+# Automatic HTTPS via Caddy (Let's Encrypt). Use instead of host nginx:
+#
+#   1. Stop host nginx: sudo systemctl stop nginx
+#   2. Set SSL_EMAIL and TELEGRAM_LOGIN_DOMAIN in .env
+#   3. docker compose -f docker-compose.yml -f docker-compose.ssl.yml -p marketmamba up -d --build
+#
+services:
+  app:
+    ports: []
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: marketmamba-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TELEGRAM_LOGIN_DOMAIN: ${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}
+      SSL_EMAIL: ${SSL_EMAIL:?Set SSL_EMAIL in .env for automatic HTTPS}
+    volumes:
+      - ./deploy/Caddyfile.template:/etc/caddy/Caddyfile.template:ro
+      - ./scripts/caddy-entrypoint.sh:/usr/local/bin/caddy-entrypoint.sh:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    entrypoint: ["/bin/sh", "/usr/local/bin/caddy-entrypoint.sh"]
+    depends_on:
+      app:
+        condition: service_started
+    networks:
+      - forexbot-network
+
+volumes:
+  caddy_data:
+  caddy_config:

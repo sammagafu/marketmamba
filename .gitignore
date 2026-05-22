@@ -37,6 +37,7 @@ vendor/
 /dist/
 web/node_modules/
 # Keep internal/api/dist for go:embed (built via make web-build)
+deploy/*.generated
 
 # Logs
 *.log

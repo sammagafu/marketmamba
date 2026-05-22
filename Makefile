@@ -1,4 +1,4 @@
-.PHONY: help install build run test docker-build docker-up docker-down docker-logs clean fmt lint web-build vps-up vps-down vps-logs vps-migrate vps-seed-admin
+.PHONY: help install build run test docker-build docker-up docker-down docker-logs clean fmt lint web-build vps-up vps-down vps-logs vps-migrate vps-seed-admin vps-ssl vps-deploy
 
 help:
 	@echo "Market Mamba - Available Commands"
@@ -22,6 +22,8 @@ help:
 	@echo "  make vps-logs        - Follow app logs"
 	@echo "  make vps-migrate     - Run SQL migrations 002-004"
 	@echo "  make vps-seed-admin  - Create email admin from .env"
+	@echo "  make vps-ssl         - Let's Encrypt + nginx (sudo, reads .env)"
+	@echo "  make vps-deploy      - git pull, docker up, auto SSL (sudo)"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-migrate    - Run database migrations"
@@ -96,6 +98,12 @@ vps-migrate:
 
 vps-seed-admin:
 	docker compose -p marketmamba exec app ./server seed-admin
+
+vps-ssl:
+	sudo -E bash scripts/setup-ssl.sh
+
+vps-deploy:
+	sudo -E bash scripts/vps-deploy.sh
 
 db-migrate:
 	@echo "Running database migrations..."

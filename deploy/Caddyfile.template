@@ -1,0 +1,12 @@
+# Automatic HTTPS via Caddy (Let's Encrypt). Used with docker-compose.ssl.yml
+# Placeholders replaced at container start by scripts/caddy-entrypoint.sh
+
+{
+	email __SSL_EMAIL__
+}
+
+__DOMAIN__ {
+	encode gzip
+	header Cross-Origin-Opener-Policy "same-origin-allow-popups"
+	reverse_proxy app:8090
+}

@@ -44,6 +44,8 @@ scp /Users/codexl-008/iloveprojects/forex-bot/.env \
 | `WEB_SESSION_SECRET` | Random secret — `openssl rand -hex 32` |
 | `BROKER_ENCRYPTION_KEY` | Random secret (32+ chars) |
 | `CORS_ORIGINS` | `https://marketmamba.kkooapp.co.tz` |
+| `SSL_EMAIL` | Email for Let's Encrypt expiry notices (auto HTTPS) |
+| `TELEGRAM_LOGIN_DOMAIN` | `marketmamba.kkooapp.co.tz` (cert + nginx server_name) |
 
 ### Admin email login (optional, recommended)
 
@@ -108,35 +110,38 @@ Log in at `https://marketmamba.kkooapp.co.tz` → **Admin login (email)**.
 
 ---
 
-## 6. Nginx + SSL (HTTPS)
+## 6. Automatic SSL (HTTPS)
 
-DNS must point `marketmamba.kkooapp.co.tz` → this server before running certbot.
+DNS must point your domain (e.g. `marketmamba.kkooapp.co.tz`) → this VPS. Ports **80** and **443** must be open.
 
-**Automated (recommended):**
+### Option A — Host nginx + Certbot (recommended)
 
-```bash
-cd /home/sammy/marketmamba
-sudo bash scripts/setup-ssl.sh
-```
+1. Set in `.env`:
 
-**Manual:**
+   ```bash
+   SSL_EMAIL=your-email@example.com
+   TELEGRAM_LOGIN_DOMAIN=marketmamba.kkooapp.co.tz
+   ```
 
-```bash
-# 1) HTTP first (Let's Encrypt needs port 80)
-sudo cp deploy/nginx-marketmamba-http.conf.example \
-  /etc/nginx/sites-available/marketmamba.kkooapp.co.tz
-sudo ln -sf /etc/nginx/sites-available/marketmamba.kkooapp.co.tz /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+2. Run once (idempotent — safe to re-run for renew/updates):
 
-# 2) Get certificate (enter email when prompted)
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d marketmamba.kkooapp.co.tz
+   ```bash
+   cd /home/sammy/marketmamba
+   sudo -E bash scripts/setup-ssl.sh
+   ```
 
-# 3) Full SSL config (HTTP redirect + Telegram popup header)
-sudo cp deploy/nginx-marketmamba.conf.example \
-  /etc/nginx/sites-available/marketmamba.kkooapp.co.tz
-sudo nginx -t && sudo systemctl reload nginx
-```
+   Or full deploy + SSL:
+
+   ```bash
+   sudo -E bash scripts/vps-deploy.sh
+   ```
+
+What it does:
+
+- Renders nginx from `deploy/*.template` for your domain
+- Obtains Let's Encrypt cert via **webroot** (`/var/www/certbot`)
+- Installs HTTPS config with HTTP→HTTPS redirect + Telegram `COOP` header
+- Enables **certbot.timer** for automatic renewal + nginx reload hook
 
 **Verify:**
 
@@ -144,6 +149,24 @@ sudo nginx -t && sudo systemctl reload nginx
 curl -sI https://marketmamba.kkooapp.co.tz/health
 sudo certbot renew --dry-run
 ```
+
+### Option B — Docker Caddy (all-in-one TLS)
+
+No host nginx. Caddy requests and renews certificates automatically.
+
+```bash
+# Stop host nginx if it holds ports 80/443
+sudo systemctl stop nginx
+
+# .env must include SSL_EMAIL
+docker compose -f docker-compose.yml -f docker-compose.ssl.yml -p marketmamba up -d --build
+```
+
+Uses `deploy/Caddyfile.template` and proxies to `app:8090` on the Docker network.
+
+### Legacy static configs
+
+`deploy/nginx-marketmamba*.conf.example` remain as references; prefer templates + `scripts/setup-ssl.sh`.
 
 ---
 
