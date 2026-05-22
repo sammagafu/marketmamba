@@ -80,9 +80,9 @@ services:
       - .env
     environment:
       TELEGRAM_LOGIN_DOMAIN: ${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}
-      SSL_EMAIL: ${SSL_EMAIL:?Set SSL_EMAIL in .env for automatic HTTPS}
       ENABLE_SSL: ${ENABLE_SSL:-true}
       APP_ENV: ${APP_ENV:-production}
+      # SSL_EMAIL loaded from env_file (.env) — see scripts/caddy-entrypoint.sh
     volumes:
       - ./deploy/Caddyfile.template:/etc/caddy/Caddyfile.template:ro
       - ./scripts/caddy-entrypoint.sh:/usr/local/bin/caddy-entrypoint.sh:ro

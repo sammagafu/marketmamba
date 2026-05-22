@@ -4,6 +4,9 @@ set -eu
 
 DOMAIN="${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}"
 EMAIL="${SSL_EMAIL:-}"
+if [ -z "${EMAIL}" ] && [ -n "${ADMIN_EMAIL:-}" ]; then
+  EMAIL="${ADMIN_EMAIL}"
+fi
 ENABLE_SSL="${ENABLE_SSL:-true}"
 
 CADDYFILE="/etc/caddy/Caddyfile"
@@ -21,7 +24,7 @@ EOF
 fi
 
 if [ -z "${EMAIL}" ]; then
-  echo "ERROR: Set SSL_EMAIL in .env for automatic HTTPS" >&2
+  echo "ERROR: Set SSL_EMAIL (or ADMIN_EMAIL) in .env for automatic HTTPS" >&2
   exit 1
 fi
 
