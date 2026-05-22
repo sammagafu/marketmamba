@@ -22,28 +22,33 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: forexbot-app
+    env_file:
+      - .env
     environment:
       DATABASE_URL: "postgres://forexbot:forexbot_password_change_me@postgres:5432/forexbot?sslmode=disable"
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
       BROKER_PROVIDER: mock
       MAX_RISK_PER_TRADE: 0.005
       MAX_DAILY_LOSS: 0.02
       MAX_OPEN_TRADES: 2
       MAX_TRADES_PER_DAY: 10
-      APP_ENV: ${APP_ENV:-development}
+      APP_ENV: ${APP_ENV:-production}
       PORT: 8080
       HTTP_PORT: ${HTTP_PORT:-8090}
       ENABLE_WEB: ${ENABLE_WEB:-true}
-      WEB_API_KEY: ${WEB_API_KEY}
-      WEB_SESSION_SECRET: ${WEB_SESSION_SECRET}
+      WEB_API_KEY: ${WEB_API_KEY:?Set WEB_API_KEY in .env}
+      WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?Set WEB_SESSION_SECRET in .env}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-market_mamba_bot}
+      TELEGRAM_BOT_CLIENT_ID: ${TELEGRAM_BOT_CLIENT_ID:-}
+      TELEGRAM_LOGIN_DOMAIN: ${TELEGRAM_LOGIN_DOMAIN:-marketmamba.kkooapp.co.tz}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://marketmamba.kkooapp.co.tz}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://marketmamba.kkooapp.co.tz}
-      BROKER_ENCRYPTION_KEY: ${BROKER_ENCRYPTION_KEY}
+      BROKER_ENCRYPTION_KEY: ${BROKER_ENCRYPTION_KEY:?Set BROKER_ENCRYPTION_KEY in .env}
       PUBLIC_MODE: ${PUBLIC_MODE:-true}
       SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED:-false}
       FREE_TRIAL_DAYS: ${FREE_TRIAL_DAYS:-30}
-      TELEGRAM_ADMIN_USER_IDS: ${TELEGRAM_ADMIN_USER_IDS}
+      TELEGRAM_ADMIN_USER_IDS: ${TELEGRAM_ADMIN_USER_IDS:?Set TELEGRAM_ADMIN_USER_IDS in .env}
       SUBSCRIPTION_CONTACT: ${SUBSCRIPTION_CONTACT:-Free testing — no payment yet.}
     ports:
       - "127.0.0.1:8090:8090"

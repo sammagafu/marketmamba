@@ -1,4 +1,4 @@
-.PHONY: help install build run test docker-build docker-up docker-down docker-logs clean fmt lint
+.PHONY: help install build run test docker-build docker-up docker-down docker-logs clean fmt lint web-build vps-up vps-down vps-logs vps-migrate vps-seed-admin
 
 help:
 	@echo "Market Mamba - Available Commands"
@@ -15,6 +15,13 @@ help:
 	@echo "  make docker-up     - Start containers"
 	@echo "  make docker-down   - Stop containers"
 	@echo "  make docker-logs   - View container logs"
+	@echo ""
+	@echo "VPS (project name marketmamba):"
+	@echo "  make vps-up          - Build and start on VPS"
+	@echo "  make vps-down        - Stop"
+	@echo "  make vps-logs        - Follow app logs"
+	@echo "  make vps-migrate     - Run SQL migrations 002-004"
+	@echo "  make vps-seed-admin  - Create email admin from .env"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-migrate    - Run database migrations"
@@ -72,6 +79,23 @@ docker-down:
 
 docker-logs:
 	docker-compose logs -f
+
+vps-up:
+	docker compose -p marketmamba up -d --build
+
+vps-down:
+	docker compose -p marketmamba down
+
+vps-logs:
+	docker compose -p marketmamba logs -f app
+
+vps-migrate:
+	docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/002_broker_connections.sql
+	docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/003_users_subscriptions.sql
+	docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/004_web_admins.sql
+
+vps-seed-admin:
+	docker compose -p marketmamba exec app ./server seed-admin
 
 db-migrate:
 	@echo "Running database migrations..."

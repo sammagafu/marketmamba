@@ -423,8 +423,16 @@ func (tb *TelegramBot) handleDailyReport(chatID int64, userID int64) {
 		tb.sendMessage(chatID, "❌ Error fetching daily stats")
 		return
 	}
-	tb.sendMessage(chatID, fmt.Sprintf(`*Daily Report*
-Trades: %d | Net: $%.2f`, stats.TradeCount, stats.NetProfit))
+	msg := fmt.Sprintf(`*Daily Report*
+Trades: %d (W:%d L:%d)
+Net P/L: $%.2f
+Profit: $%.2f | Loss: $%.2f`,
+		stats.TradeCount, stats.WinCount, stats.LossCount,
+		stats.NetProfit, stats.TotalProfit, stats.TotalLoss)
+	if stats.TradeCount == 0 {
+		msg += "\n\n_No trades recorded today yet._"
+	}
+	tb.sendMessage(chatID, msg)
 }
 
 func (tb *TelegramBot) handleAutoStart(chatID int64, userID int64) {

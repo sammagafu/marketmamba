@@ -26,7 +26,10 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"subscription_required": s.cfg.App.SubscriptionRequired,
 		"subscription_message":  s.cfg.App.SubscriptionContactMessage,
 		"free_trial_days":       s.cfg.App.FreeTrialDays,
-		"telegram_bot_username": s.cfg.Telegram.BotUsername,
+		"telegram_bot_username":  s.cfg.Telegram.BotUsername,
+		"telegram_client_id":     s.cfg.Telegram.BotClientID,
+		"telegram_login_domain":  s.cfg.Telegram.LoginDomain,
+		"public_site_url":        s.cfg.App.PublicSiteURL,
 		"telegram_login_enabled": s.cfg.Telegram.BotToken != "",
 	})
 }
@@ -254,6 +257,45 @@ func (s *Server) handleAdminActivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"subscription": sub})
+}
+
+func (s *Server) handleAdminBlockUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var req struct {
+		TelegramID int64 `json:"telegram_id"`
+		Blocked    bool  `json:"blocked"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := s.storage.SetUserBlocked(req.TelegramID, req.Blocked); err != nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"telegram_id": req.TelegramID, "blocked": req.Blocked})
+}
+
+func (s *Server) handleAdminRevokeSubscription(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var req struct {
+		TelegramID int64 `json:"telegram_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := s.storage.RevokeActiveSubscription(req.TelegramID); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"telegram_id": req.TelegramID, "revoked": true})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {

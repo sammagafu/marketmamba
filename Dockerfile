@@ -14,12 +14,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /web/dist ./internal/api/dist
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server && go build -o seedadmin ./cmd/seedadmin
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates postgresql-client
 WORKDIR /root/
 COPY --from=builder /app/server .
+COPY --from=builder /app/seedadmin .
 COPY migrations/ ./migrations/
 EXPOSE 8090
 CMD ["./server"]

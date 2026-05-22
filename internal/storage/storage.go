@@ -273,6 +273,21 @@ func (ps *PostgresStorage) GetDailyStats(userID int64, date time.Time) (*models.
 		&stats.ID, &stats.UserID, &stats.TradingDate, &stats.TradeCount, &stats.WinCount, &stats.LossCount,
 		&stats.TotalProfit, &stats.TotalLoss, &stats.NetProfit, &stats.WinRate, &stats.MaxDrawdown, &stats.UpdatedAt)
 
+	if err == sql.ErrNoRows {
+		return &models.DailyStats{
+			UserID:       userID,
+			TradingDate:  startOfDay,
+			TradeCount:   0,
+			WinCount:     0,
+			LossCount:    0,
+			TotalProfit:  0,
+			TotalLoss:    0,
+			NetProfit:    0,
+			WinRate:      0,
+			MaxDrawdown:  0,
+			UpdatedAt:    time.Now(),
+		}, nil
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -47,6 +47,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/health", s.handleHealth)
 	s.mux.HandleFunc("/api/v1/config", s.handlePublicConfig)
 	s.mux.HandleFunc("/api/v1/auth/telegram", s.handleTelegramLogin)
+	s.mux.HandleFunc("/api/v1/auth/telegram/oidc", s.handleTelegramOIDCLogin)
+	s.mux.HandleFunc("/api/v1/auth/telegram/callback", s.handleTelegramLoginCallback)
+	s.mux.HandleFunc("/api/v1/auth/email", s.handleEmailLogin)
 	s.mux.HandleFunc("/api/v1/auth/me", s.withUser(s.handleAuthMe))
 	s.mux.HandleFunc("/api/v1/brokers/types", s.withUser(s.handleBrokerTypes))
 	s.mux.HandleFunc("/api/v1/brokers/connection", s.withUser(s.handleBrokerConnection))
@@ -58,6 +61,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/admin/stats", s.withAdmin(s.handleAdminStats))
 	s.mux.HandleFunc("/api/v1/admin/users", s.withAdmin(s.handleAdminUsers))
 	s.mux.HandleFunc("/api/v1/admin/activate", s.withAdmin(s.handleAdminActivate))
+	s.mux.HandleFunc("/api/v1/admin/users/block", s.withAdmin(s.handleAdminBlockUser))
+	s.mux.HandleFunc("/api/v1/admin/users/revoke", s.withAdmin(s.handleAdminRevokeSubscription))
 
 	if staticFS, err := fs.Sub(staticFiles, "dist"); err == nil {
 		s.mux.Handle("/", spaHandler(staticFS))

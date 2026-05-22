@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"forex-bot/internal/adminseed"
 	"forex-bot/internal/api"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
@@ -42,6 +43,14 @@ func main() {
 		log.Fatalf("Database health check failed: %v", err)
 	}
 	logger.Info("Database connected successfully")
+
+	if len(os.Args) > 1 && os.Args[1] == "seed-admin" {
+		if err := adminseed.Run(db); err != nil {
+			log.Fatalf("seed-admin: %v", err)
+		}
+		log.Println("Web admin ready — log in with ADMIN_EMAIL on the dashboard")
+		return
+	}
 
 	resolveBroker := func(userID int64) (broker.Broker, error) {
 		b, _, err := broker.ResolveBroker(db, userID, cfg.App.BrokerEncryptionKey, cfg.Broker.Provider)

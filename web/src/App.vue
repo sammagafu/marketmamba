@@ -1,13 +1,19 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { api, loadSession, saveLegacySession, clearSession, isLoggedIn } from './api'
+import { api, API, apiTargetLabel, loadSession, saveLegacySession, clearSession } from './api'
 import TelegramLogin from './components/TelegramLogin.vue'
+import EmailAdminLogin from './components/EmailAdminLogin.vue'
 
-const loggedIn = ref(isLoggedIn())
+const loggedIn = ref(false)
 const userName = ref('')
 const apiKey = ref(loadSession().apiKey)
 const telegramId = ref(loadSession().telegramId)
-const showManual = ref(false)
+const isLocalhost = ref(
+  typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'),
+)
+const showManual = ref(isLocalhost.value)
+const apiOffline = ref(false)
 const config = ref(null)
 const status = ref(null)
 const account = ref(null)
@@ -30,8 +36,11 @@ const botUsername = computed(() => config.value?.telegram_bot_username || 'marke
 
 function onLoggedIn(data) {
   loggedIn.value = true
-  userName.value = [data.user?.first_name, data.user?.last_name].filter(Boolean).join(' ')
-  message.value = `Welcome, ${userName.value || data.telegram_id}!`
+  userName.value =
+    [data.user?.first_name, data.user?.last_name].filter(Boolean).join(' ') ||
+    data.email ||
+    String(data.telegram_id)
+  message.value = `Welcome, ${userName.value}!`
   messageOk.value = true
   refresh()
 }
@@ -61,7 +70,7 @@ async function refresh() {
   if (!loggedIn.value) return
   message.value = ''
   try {
-    config.value = await fetch('/api/v1/config').then((r) => r.json())
+    config.value = await fetch(`${API}/config`).then((r) => r.json())
     const me = await api('/auth/me')
     userName.value = [me.user?.first_name, me.user?.last_name].filter(Boolean).join(' ')
     isAdmin.value = me.is_admin
@@ -135,6 +144,36 @@ function collectCreds() {
   return creds
 }
 
+async function adminBlockUser(telegramId, blocked) {
+  try {
+    await api('/admin/users/block', {
+      method: 'POST',
+      body: { telegram_id: Number(telegramId), blocked },
+    })
+    message.value = blocked ? 'User blocked' : 'User unblocked'
+    messageOk.value = true
+    refresh()
+  } catch (e) {
+    message.value = e.message
+    messageOk.value = false
+  }
+}
+
+async function adminRevoke(telegramId) {
+  try {
+    await api('/admin/users/revoke', {
+      method: 'POST',
+      body: { telegram_id: Number(telegramId) },
+    })
+    message.value = 'Subscription revoked'
+    messageOk.value = true
+    refresh()
+  } catch (e) {
+    message.value = e.message
+    messageOk.value = false
+  }
+}
+
 async function adminActivate() {
   try {
     await api('/admin/activate', {
@@ -155,9 +194,39 @@ async function adminActivate() {
   }
 }
 
+async function loadConfig() {
+  try {
+    const res = await fetch(`${API}/config`)
+    if (!res.ok) throw new Error('API error')
+    config.value = await res.json()
+    apiOffline.value = false
+  } catch {
+    apiOffline.value = true
+    config.value = {
+      telegram_bot_username: 'market_mamba_bot',
+      telegram_login_enabled: true,
+    }
+    message.value = `Cannot reach API (dev proxy → ${apiTargetLabel()}). Check URL or use manual login below.`
+    messageOk.value = false
+  }
+}
+
+async function tryRestoreSession() {
+  const s = loadSession()
+  if (!s.sessionToken && !(s.apiKey && s.telegramId)) return
+  try {
+    await loadConfig()
+    loggedIn.value = true
+    await refresh()
+  } catch {
+    clearSession()
+    loggedIn.value = false
+  }
+}
+
 onMounted(async () => {
-  config.value = await fetch('/api/v1/config').then((r) => r.json())
-  if (loggedIn.value) refresh()
+  await loadConfig()
+  await tryRestoreSession()
 })
 </script>
 
@@ -176,18 +245,35 @@ onMounted(async () => {
   <p v-if="message" :class="messageOk ? 'ok' : 'err'" style="text-align:center">{{ message }}</p>
 
   <section v-if="!loggedIn" class="card wide login-card">
-    <h2>Log in</h2>
+    <h2>Welcome to Market Mamba</h2>
+    <p v-if="apiOffline" class="api-offline">
+      API not reachable at <strong>{{ apiTargetLabel() }}</strong>.
+      Edit <code>web/.env.development</code> and restart <code>npm run dev</code>.
+    </p>
+
     <TelegramLogin
-      v-if="config?.telegram_login_enabled"
+      v-if="config?.telegram_client_id"
       :bot-username="botUsername"
+      :client-id="config.telegram_client_id"
+      :login-domain="config?.telegram_login_domain || 'marketmamba.kkooapp.co.tz'"
+      :public-site-url="config?.public_site_url || 'https://marketmamba.kkooapp.co.tz'"
       @logged-in="onLoggedIn"
       @error="(m) => { message = m; messageOk = false }"
     />
-    <p>
-      <button class="btn-secondary" type="button" @click="showManual = !showManual">
-        {{ showManual ? 'Hide' : 'Show' }} manual login (dev)
-      </button>
-    </p>
+
+    <hr class="divider" />
+
+    <EmailAdminLogin
+      @logged-in="onLoggedIn"
+      @error="(m) => { message = m; messageOk = false }"
+    />
+
+    <hr class="divider" />
+
+    <p class="muted manual-label">Manual login (API key)</p>
+    <button class="btn-secondary" type="button" @click="showManual = !showManual">
+      {{ showManual ? 'Hide manual login' : 'Show manual login' }}
+    </button>
     <div v-if="showManual" class="manual-row">
       <div class="field">
         <label>API key</label>
@@ -245,13 +331,29 @@ onMounted(async () => {
         <button class="btn-primary" @click="adminActivate">Activate (manual pay)</button>
       </div>
       <table v-if="recentUsers.length" style="margin-top:1rem">
-        <thead><tr><th>ID</th><th>Name</th><th>Username</th><th>Last seen</th></tr></thead>
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Status</th><th>Last seen</th><th>Actions</th>
+          </tr>
+        </thead>
         <tbody>
           <tr v-for="u in recentUsers" :key="u.telegram_id">
             <td>{{ u.telegram_id }}</td>
-            <td>{{ u.first_name }} {{ u.last_name }}</td>
-            <td>@{{ u.username }}</td>
+            <td>{{ u.first_name }} {{ u.last_name }} @{{ u.username }}</td>
+            <td>{{ u.is_blocked ? 'blocked' : 'active' }}</td>
             <td>{{ new Date(u.last_seen_at).toLocaleString() }}</td>
+            <td class="admin-actions">
+              <button
+                class="btn-secondary"
+                type="button"
+                @click="adminBlockUser(u.telegram_id, !u.is_blocked)"
+              >
+                {{ u.is_blocked ? 'Unblock' : 'Block' }}
+              </button>
+              <button class="btn-secondary" type="button" @click="adminRevoke(u.telegram_id)">
+                Revoke sub
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -298,7 +400,19 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.login-card { max-width: 520px; margin: 2rem auto; }
+.login-card { max-width: 480px; margin: 2rem auto; }
+.api-offline {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+.divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+.manual-label { margin-bottom: 0.5rem; font-size: 0.9rem; }
 .manual-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-top: 1rem; }
 .manual-row .field { flex: 1; min-width: 140px; margin: 0; }
+.admin-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.admin-actions button { padding: 0.35rem 0.5rem; font-size: 0.8rem; }
 </style>

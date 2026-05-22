@@ -229,43 +229,23 @@ go test ./internal/risk -v
 
 ## VPS Deployment
 
-### 1. Prepare Server
-```bash
-sudo apt update && sudo apt install -y docker.io docker-compose postgresql-client
+**Full guide:** [VPS_DEPLOY.md](./VPS_DEPLOY.md) · **Operator index:** [Agent.md](./Agent.md)
 
-# Add user to docker group
-sudo usermod -aG docker $USER
-```
-
-### 2. Setup Application
 ```bash
-git clone your-repo forex-bot
+git clone git@github.com:sammagafu/marketmamba.git forex-bot
 cd forex-bot
-cp .env.example .env
+cp .env.example .env && nano .env   # TELEGRAM_BOT_TOKEN, WEB_API_KEY, secrets, ADMIN_EMAIL
 
-# Edit .env with production values
-nano .env
+make vps-up
+make vps-migrate
+make vps-seed-admin    # email admin login (ADMIN_EMAIL / ADMIN_PASSWORD in .env)
+
+make vps-logs
 ```
 
-### 3. Launch with Docker Compose
-```bash
-docker-compose up -d
+Site: `https://marketmamba.kkooapp.co.tz` — nginx example in `deploy/nginx-marketmamba.conf.example`.
 
-# View logs
-docker-compose logs -f
-```
-
-### 4. Enable Auto-restart
-```bash
-# Ensure bot restarts on server reboot
-docker-compose up -d --restart unless-stopped
-```
-
-### 5. Setup Backups
-```bash
-# Backup PostgreSQL daily
-0 2 * * * docker-compose exec -T postgres pg_dump -U forexbot forexbot > /backups/forex_bot_$(date +\%Y\%m\%d).sql
-```
+**Admin login:** email + password on the dashboard, or Telegram `/admin` commands (same Telegram ID in `TELEGRAM_ADMIN_USER_IDS`).
 
 ## Code Quality
 

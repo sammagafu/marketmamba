@@ -19,7 +19,9 @@ type Config struct {
 
 type TelegramConfig struct {
 	BotToken       string
+	BotClientID    string // OIDC client id (bot numeric id from token prefix)
 	BotUsername    string // for Login Widget, e.g. market_mamba_bot
+	LoginDomain    string // Allowed URL host in BotFather Web Login
 	AllowedUserIDs []int64 // legacy; optional when public
 	AdminUserIDs   []int64
 }
@@ -53,6 +55,7 @@ type AppConfig struct {
 	FreeTrialDays               int
 	SubscriptionContactMessage  string
 	WebSessionSecret            string
+	PublicSiteURL               string // https://marketmamba.kkooapp.co.tz — Telegram Login callback origin
 }
 
 func LoadConfig() (*Config, error) {
@@ -61,7 +64,9 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Telegram: TelegramConfig{
 			BotToken:       getEnv("TELEGRAM_BOT_TOKEN", ""),
+			BotClientID:    botClientID(getEnv("TELEGRAM_BOT_CLIENT_ID", ""), getEnv("TELEGRAM_BOT_TOKEN", "")),
 			BotUsername:    getEnv("TELEGRAM_BOT_USERNAME", "market_mamba_bot"),
+			LoginDomain:    getEnv("TELEGRAM_LOGIN_DOMAIN", "marketmamba.kkooapp.co.tz"),
 			AllowedUserIDs: parseUserIDs(getEnv("TELEGRAM_ALLOWED_USER_IDS", "")),
 			AdminUserIDs:   parseAdminIDs(getEnv("TELEGRAM_ADMIN_USER_IDS", getEnv("TELEGRAM_ALLOWED_USER_IDS", ""))),
 		},
@@ -91,6 +96,7 @@ func LoadConfig() (*Config, error) {
 			FreeTrialDays:              parseInt(getEnv("FREE_TRIAL_DAYS", "30")),
 			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "Free testing period. Contact @codexxl on Telegram to extend after launch."),
 			WebSessionSecret:           getEnv("WEB_SESSION_SECRET", ""),
+			PublicSiteURL:              strings.TrimRight(getEnv("PUBLIC_SITE_URL", "https://marketmamba.kkooapp.co.tz"), "/"),
 		},
 	}
 
@@ -153,6 +159,16 @@ func (c *Config) IsAdmin(telegramID int64) bool {
 		}
 	}
 	return false
+}
+
+func botClientID(explicit, botToken string) string {
+	if strings.TrimSpace(explicit) != "" {
+		return strings.TrimSpace(explicit)
+	}
+	if i := strings.Index(botToken, ":"); i > 0 {
+		return botToken[:i]
+	}
+	return ""
 }
 
 func parseCSV(s string) []string {
