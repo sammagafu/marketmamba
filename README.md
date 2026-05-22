@@ -1,4 +1,4 @@
-# Forex Scalping Bot
+# Market Mamba
 
 A production-ready Go backend for automated forex trading with Telegram bot control, risk management, and broker integration.
 

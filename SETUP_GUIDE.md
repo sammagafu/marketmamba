@@ -1,4 +1,4 @@
-# Setup Guide - Forex Scalping Bot
+# Setup Guide - Market Mamba
 
 Step-by-step guide to get your bot running in 10 minutes.
 
@@ -7,8 +7,8 @@ Step-by-step guide to get your bot running in 10 minutes.
 1. Open Telegram and search for **@BotFather**
 2. Send message: `/newbot`
 3. Follow the prompts:
-   - **Name:** Forex Scalping Bot (or your choice)
-   - **Username:** forex_scalping_bot_<random> (must be unique)
+   - **Name:** Market Mamba (or your choice)
+   - **Username:** market_mamba_bot_<random> (must be unique)
 4. BotFather will reply with your **API Token** - copy this
 5. Example token format: `123456789:ABCdefGHIjklmNOPqrsTUVwxyz1234567`
 
@@ -61,7 +61,7 @@ docker-compose logs -f app
 
 Expected output:
 ```
-[INFO] Starting Forex Scalping Bot
+[INFO] Starting Market Mamba
 [INFO] Database connected successfully
 [INFO] Bot initialized successfully
 [INFO] Telegram bot started: @<your_bot_username>

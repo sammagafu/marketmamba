@@ -121,7 +121,7 @@ func (tb *TelegramBot) handleMessage(msg *tgbotapi.Message) {
 }
 
 func (tb *TelegramBot) handleStart(chatID int64) {
-	msg := `🤖 *Forex Scalping Bot*
+	msg := `🐍 *Market Mamba*
 
 *Manual Trading:*
 /open <symbol> <type> <qty> <sl> <tp> - Open trade

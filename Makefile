@@ -1,7 +1,7 @@
 .PHONY: help install build run test docker-build docker-up docker-down docker-logs clean fmt lint
 
 help:
-	@echo "Forex Scalping Bot - Available Commands"
+	@echo "Market Mamba - Available Commands"
 	@echo ""
 	@echo "Development:"
 	@echo "  make install        - Download Go dependencies"

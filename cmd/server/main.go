@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	logger.Info("Starting Forex Scalping Bot")
+	logger.Info("Starting Market Mamba")
 	logger.Info("Environment: %s", cfg.App.Environment)
 
 	// Initialize storage
@@ -162,7 +162,7 @@ func initializeBotState(db storage.Storage, userID int64) {
 func logDemoInfo() {
 	separator := strings.Repeat("=", 60)
 	fmt.Println("\n" + separator)
-	fmt.Println("Forex Scalping Bot - Development Mode")
+	fmt.Println("Market Mamba - Development Mode")
 	fmt.Println(separator)
 	fmt.Println("\nAvailable Commands:")
 	fmt.Println("  /start        - Show help")
