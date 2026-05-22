@@ -7,7 +7,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, __dirname, '')
-  const apiTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8090'
+  const apiTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8090'
+  const secure = apiTarget.startsWith('https')
 
   return {
     root: __dirname,
@@ -20,8 +21,8 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       strictPort: true,
       proxy: {
-        '/api': { target: apiTarget, changeOrigin: true, secure: true },
-        '/health': { target: apiTarget, changeOrigin: true, secure: true },
+        '/api': { target: apiTarget, changeOrigin: true, secure },
+        '/health': { target: apiTarget, changeOrigin: true, secure },
       },
     },
   }

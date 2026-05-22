@@ -206,7 +206,7 @@ async function loadConfig() {
       telegram_bot_username: 'market_mamba_bot',
       telegram_login_enabled: true,
     }
-    message.value = `Cannot reach API (dev proxy → ${apiTargetLabel()}). Check URL or use manual login below.`
+    message.value = `API unreachable (proxy → ${apiTargetLabel()}). Start Docker: docker compose -p marketmamba up -d — or fix VPS nginx. Use manual login below.`
     messageOk.value = false
   }
 }
