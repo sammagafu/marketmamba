@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"io/fs"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -64,26 +65,62 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/admin/users/block", s.withAdmin(s.handleAdminBlockUser))
 	s.mux.HandleFunc("/api/v1/admin/users/revoke", s.withAdmin(s.handleAdminRevokeSubscription))
 
-	if staticFS, err := fs.Sub(staticFiles, "dist"); err == nil {
-		s.mux.Handle("/", spaHandler(staticFS))
-	}
+	s.registerStatic()
 }
 
-func spaHandler(staticFS fs.FS) http.Handler {
-	fileServer := http.FileServer(http.FS(staticFS))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (s *Server) registerStatic() {
+	if !s.cfg.App.EnableWeb {
+		return
+	}
+	staticFS, err := fs.Sub(staticFiles, "dist")
+	if err != nil {
+		log.Printf("[web] embed dist failed: %v", err)
+		return
+	}
+	if _, err := fs.Stat(staticFS, "index.html"); err != nil {
+		log.Printf("[web] index.html missing in embed — run: make web-build")
+		return
+	}
+	assets := http.FileServer(http.FS(staticFS))
+	s.mux.Handle("/assets/", http.StripPrefix("/assets/", assets))
+	s.mux.HandleFunc("GET /{$}", serveSPA(staticFS))
+	s.mux.HandleFunc("GET /", serveSPA(staticFS))
+	log.Printf("[web] dashboard static files ready")
+}
+
+func serveSPA(staticFS fs.FS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
 			return
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path == "" || path == "/" {
-			r.URL.Path = "/"
-		} else if _, err := fs.Stat(staticFS, path); err != nil {
-			r.URL.Path = "/"
+			serveFile(w, staticFS, "index.html")
+			return
 		}
-		fileServer.ServeHTTP(w, r)
-	})
+		if _, err := fs.Stat(staticFS, path); err == nil {
+			serveFile(w, staticFS, path)
+			return
+		}
+		serveFile(w, staticFS, "index.html")
+	}
+}
+
+func serveFile(w http.ResponseWriter, fsys fs.FS, name string) {
+	b, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		http.NotFound(w, nil)
+		return
+	}
+	if strings.HasSuffix(name, ".html") {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	} else if strings.HasSuffix(name, ".css") {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	} else if strings.HasSuffix(name, ".js") {
+		w.Header().Set("Content-Type", "application/javascript")
+	}
+	w.Write(b)
 }
 
 func (s *Server) Handler() http.Handler {

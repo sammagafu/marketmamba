@@ -108,13 +108,41 @@ Log in at `https://marketmamba.kkooapp.co.tz` → **Admin login (email)**.
 
 ---
 
-## 6. Nginx + HTTPS
+## 6. Nginx + SSL (HTTPS)
+
+DNS must point `marketmamba.kkooapp.co.tz` → this server before running certbot.
+
+**Automated (recommended):**
 
 ```bash
-sudo cp deploy/nginx-marketmamba.conf.example /etc/nginx/sites-available/marketmamba.kkooapp.co.tz
+cd /home/sammy/marketmamba
+sudo bash scripts/setup-ssl.sh
+```
+
+**Manual:**
+
+```bash
+# 1) HTTP first (Let's Encrypt needs port 80)
+sudo cp deploy/nginx-marketmamba-http.conf.example \
+  /etc/nginx/sites-available/marketmamba.kkooapp.co.tz
 sudo ln -sf /etc/nginx/sites-available/marketmamba.kkooapp.co.tz /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
+
+# 2) Get certificate (enter email when prompted)
+sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d marketmamba.kkooapp.co.tz
+
+# 3) Full SSL config (HTTP redirect + Telegram popup header)
+sudo cp deploy/nginx-marketmamba.conf.example \
+  /etc/nginx/sites-available/marketmamba.kkooapp.co.tz
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Verify:**
+
+```bash
+curl -sI https://marketmamba.kkooapp.co.tz/health
+sudo certbot renew --dry-run
 ```
 
 ---
@@ -191,5 +219,6 @@ After email admin login:
 | `getUpdates conflict` | Stop bot on Mac; never run `docker compose exec app ./server` (starts 2nd bot). Use `./seedadmin` only |
 | `bind :8090 already in use` | You started a second `./server` in the container; use `./seedadmin` for admin seed |
 | 502 from nginx | `docker compose -p marketmamba ps`, check port 8090 |
+| `GET /` 404 in browser | Rebuild app (`git pull && docker compose -p marketmamba up -d --build`); test `curl http://127.0.0.1:8090/` on VPS; fix nginx `proxy_pass` to **8090** |
 | Email login fails | Run migration 004 + `seed-admin`; check `TELEGRAM_ADMIN_USER_IDS` |
 | Widget missing | BotFather Web Login allowed URLs, use HTTPS |
