@@ -3,12 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"forex-bot/internal/broker"
 	"forex-bot/internal/models"
-	"forex-bot/internal/secrets"
-	"forex-bot/internal/utils"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -20,7 +17,7 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	payload := map[string]interface{}{
 		"app":                   "Market Mamba",
 		"public_mode":           s.cfg.App.PublicMode,
 		"subscription_required": s.cfg.App.SubscriptionRequired,
@@ -31,7 +28,15 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"telegram_login_domain":  s.cfg.Telegram.LoginDomain,
 		"public_site_url":        s.cfg.App.PublicSiteURL,
 		"telegram_login_enabled": s.cfg.Telegram.BotToken != "",
-	})
+		"session_ttl_days":       s.cfg.App.WebSessionTTLDays,
+		"signal_broadcast":       s.cfg.App.SignalBroadcastEnabled,
+	}
+	if stats, err := s.storage.GetUserStats(); err == nil && stats != nil {
+		payload["total_trades"] = stats.TotalTrades
+		payload["total_users"] = stats.TotalUsers
+		payload["open_trades"] = stats.OpenTrades
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) handleBrokerTypes(w http.ResponseWriter, r *http.Request) {
@@ -75,26 +80,8 @@ func (s *Server) saveBrokerConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if !broker.IsLiveProvider(req.Provider) {
-		writeError(w, http.StatusBadRequest, "broker not available yet — use mock")
-		return
-	}
-	if _, err := broker.NewFromProvider(req.Provider, req.Credentials); err != nil {
+	if err := broker.SaveConnection(s.storage, s.cfg.App.BrokerEncryptionKey, uid, req.Provider, req.Label, req.Credentials); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	enc, err := secrets.EncryptJSON(s.cfg.App.BrokerEncryptionKey, req.Credentials)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	now := time.Now()
-	conn := &models.BrokerConnection{
-		ID: utils.GenerateID("broker"), UserID: uid, Provider: req.Provider,
-		Label: req.Label, CredentialsEnc: enc, IsActive: true, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := s.storage.UpsertBrokerConnection(conn); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "saved", "provider": req.Provider})
@@ -178,6 +165,23 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"balance": bal, "equity": eq})
 }
 
+func (s *Server) handleTrades(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	uid := userIDFrom(r)
+	trades, err := s.storage.ListTradesByUser(uid, 50)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if trades == nil {
+		trades = []*models.Trade{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"trades": trades})
+}
+
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -207,6 +211,22 @@ func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"subscription": sub, "can_trade": canTrade, "message": msg,
 	})
+}
+
+func (s *Server) handleAdminTrades(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	trades, err := s.storage.ListRecentTrades(100)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if trades == nil {
+		trades = []*models.Trade{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"trades": trades})
 }
 
 func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {

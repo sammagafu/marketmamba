@@ -6,42 +6,42 @@ import (
 
 // Trade represents a completed or ongoing trade
 type Trade struct {
-	ID              string    `db:"id"`
-	UserID          int64     `db:"user_id"`
-	Symbol          string    `db:"symbol"`
-	Type            string    `db:"type"` // BUY or SELL
-	EntryPrice      float64   `db:"entry_price"`
-	Quantity        float64   `db:"quantity"`
-	StopLoss        float64   `db:"stop_loss"`
-	TakeProfit      float64   `db:"take_profit"`
-	RiskAmount      float64   `db:"risk_amount"`
-	RewardAmount    float64   `db:"reward_amount"`
-	RiskRewardRatio float64   `db:"risk_reward_ratio"`
-	Status          string    `db:"status"` // OPEN, CLOSED, CANCELLED
-	ExitPrice       *float64  `db:"exit_price"`
-	ExitTime        *time.Time `db:"exit_time"`
-	Profit          *float64  `db:"profit"`
-	ClosureReason   *string   `db:"closure_reason"` // TP, SL, MANUAL, etc.
-	CreatedAt       time.Time `db:"created_at"`
-	UpdatedAt       time.Time `db:"updated_at"`
+	ID              string     `db:"id" json:"id"`
+	UserID          int64      `db:"user_id" json:"user_id"`
+	Symbol          string     `db:"symbol" json:"symbol"`
+	Type            string     `db:"type" json:"type"` // BUY or SELL
+	EntryPrice      float64    `db:"entry_price" json:"entry_price"`
+	Quantity        float64    `db:"quantity" json:"quantity"`
+	StopLoss        float64    `db:"stop_loss" json:"stop_loss"`
+	TakeProfit      float64    `db:"take_profit" json:"take_profit"`
+	RiskAmount      float64    `db:"risk_amount" json:"risk_amount"`
+	RewardAmount    float64    `db:"reward_amount" json:"reward_amount"`
+	RiskRewardRatio float64    `db:"risk_reward_ratio" json:"risk_reward_ratio"`
+	Status          string     `db:"status" json:"status"` // OPEN, CLOSED, CANCELLED
+	ExitPrice       *float64   `db:"exit_price" json:"exit_price,omitempty"`
+	ExitTime        *time.Time `db:"exit_time" json:"exit_time,omitempty"`
+	Profit          *float64   `db:"profit" json:"profit,omitempty"`
+	ClosureReason   *string    `db:"closure_reason" json:"closure_reason,omitempty"`
+	CreatedAt       time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 // Position represents an open trading position
 type Position struct {
-	ID           string    `db:"id"`
-	TradeID      string    `db:"trade_id"`
-	BrokerID     string    `db:"broker_id"`
-	UserID       int64     `db:"user_id"`
-	Symbol       string    `db:"symbol"`
-	Type         string    `db:"type"`
-	Quantity     float64   `db:"quantity"`
-	EntryPrice   float64   `db:"entry_price"`
-	CurrentPrice float64   `db:"current_price"`
-	StopLoss     float64   `db:"stop_loss"`
-	TakeProfit   float64   `db:"take_profit"`
-	Profit       float64   `db:"profit"`
-	ProfitPct    float64   `db:"profit_pct"`
-	UpdatedAt    time.Time `db:"updated_at"`
+	ID           string    `db:"id" json:"id"`
+	TradeID      string    `db:"trade_id" json:"trade_id"`
+	BrokerID     string    `db:"broker_id" json:"broker_id"`
+	UserID       int64     `db:"user_id" json:"user_id"`
+	Symbol       string    `db:"symbol" json:"symbol"`
+	Type         string    `db:"type" json:"type"`
+	Quantity     float64   `db:"quantity" json:"quantity"`
+	EntryPrice   float64   `db:"entry_price" json:"entry_price"`
+	CurrentPrice float64   `db:"current_price" json:"current_price"`
+	StopLoss     float64   `db:"stop_loss" json:"stop_loss"`
+	TakeProfit   float64   `db:"take_profit" json:"take_profit"`
+	Profit       float64   `db:"profit" json:"profit"`
+	ProfitPct    float64   `db:"profit_pct" json:"profit_pct"`
+	UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
 }
 
 // Account represents user account information

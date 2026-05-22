@@ -45,6 +45,9 @@ type Storage interface {
 	// Command Logs
 	LogCommand(log *models.CommandLog) error
 
+	// Users (ACL)
+	GetUserByTelegramID(telegramID int64) (*models.User, error)
+
 	// Health
 	Health() error
 	Close() error

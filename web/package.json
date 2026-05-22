@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "cp src/assets/images/favcon.svg public/favicon.svg",
     "build": "vite build",
     "preview": "vite preview"
   },

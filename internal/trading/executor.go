@@ -16,19 +16,24 @@ import (
 type TradeExecutor struct {
 	broker     broker.Broker
 	storage    storage.Storage
+	tradeLog   *TradeLog
 	validator  *risk.RiskValidator
 	userID     int64
 	maxRetries int
 }
 
 func NewTradeExecutor(b broker.Broker, s storage.Storage, v *risk.RiskValidator, userID int64) *TradeExecutor {
-	return &TradeExecutor{
+	te := &TradeExecutor{
 		broker:     b,
 		storage:    s,
 		validator:  v,
 		userID:     userID,
 		maxRetries: 3,
 	}
+	if ps, ok := s.(*storage.PostgresStorage); ok {
+		te.tradeLog = NewTradeLog(ps)
+	}
+	return te
 }
 
 // ExecuteSignal executes a trade signal with proper validation
@@ -115,48 +120,13 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 		return nil, fmt.Errorf("failed to execute trade: %w", err)
 	}
 
-	// Create trade record
-	trade := &models.Trade{
-		ID:              utils.GenerateID("trade"),
-		UserID:          te.userID,
-		Symbol:          signal.Symbol,
-		Type:            signal.Type,
-		EntryPrice:      position.EntryPrice,
-		Quantity:        position.Quantity,
-		StopLoss:        signal.StopLoss,
-		TakeProfit:      signal.TakeProfit,
-		RiskAmount:      (signal.StopLoss - position.EntryPrice) * position.Quantity,
-		RewardAmount:    (signal.TakeProfit - position.EntryPrice) * position.Quantity,
-		RiskRewardRatio: signal.RiskRewardRatio,
-		Status:          "OPEN",
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+	position.UserID = te.userID
+	if te.tradeLog != nil {
+		if _, err := te.tradeLog.RecordOpen(te.userID, position, "AUTO"); err != nil {
+			logger.Error("Failed to log trade open: %v", err)
+		}
 	}
 
-	if err := te.storage.CreateTrade(trade); err != nil {
-		logger.Error("Failed to save trade record: %v", err)
-	}
-
-	// Create position record
-	posRecord := &models.Position{
-		ID:         utils.GenerateID("pos"),
-		TradeID:    trade.ID,
-		BrokerID:   position.BrokerID,
-		UserID:     te.userID,
-		Symbol:     signal.Symbol,
-		Type:       signal.Type,
-		Quantity:   position.Quantity,
-		EntryPrice: position.EntryPrice,
-		StopLoss:   signal.StopLoss,
-		TakeProfit: signal.TakeProfit,
-		UpdatedAt:  time.Now(),
-	}
-
-	if err := te.storage.CreatePosition(posRecord); err != nil {
-		logger.Error("Failed to save position record: %v", err)
-	}
-
-	// Log command
 	te.logCommand("AUTO_TRADE", fmt.Sprintf("%s %s %.2f", signal.Symbol, signal.Type, position.Quantity), "SUCCESS", "Trade executed")
 
 	logger.Info("Trade executed for user %d: %s %s @ %.5f (SL: %.5f TP: %.5f)", te.userID, signal.Symbol, signal.Type, position.EntryPrice, signal.StopLoss, signal.TakeProfit)
@@ -197,37 +167,16 @@ func (te *TradeExecutor) closePosition(pos *models.Position, reason string) erro
 		return fmt.Errorf("failed to close position: %w", err)
 	}
 
-	// Update position record
-	pos.UpdatedAt = time.Now()
-	if err := te.storage.UpdatePosition(pos); err != nil {
-		logger.Error("Failed to update position: %v", err)
+	exitPrice := pos.CurrentPrice
+	if exitPrice <= 0 {
+		exitPrice = pos.EntryPrice
 	}
-
-	// Update trade record
-	trade, err := te.storage.GetTradeByID(pos.TradeID)
-	if err == nil {
-		trade.Status = "CLOSED"
-		trade.ExitPrice = &pos.CurrentPrice
-		trade.ClosureReason = &reason
-		trade.UpdatedAt = time.Now()
-
-		// Calculate profit
-		var profit float64
-		if trade.Type == "BUY" {
-			profit = (pos.CurrentPrice - trade.EntryPrice) * trade.Quantity
-		} else {
-			profit = (trade.EntryPrice - pos.CurrentPrice) * trade.Quantity
+	if te.tradeLog != nil {
+		if trade, err := te.tradeLog.RecordClose(te.userID, pos.ID, exitPrice, reason); err != nil {
+			logger.Warn("Trade close log failed for %s: %v", pos.ID, err)
+		} else if trade != nil {
+			te.updateDailyStats(trade)
 		}
-		trade.Profit = &profit
-
-		if err := te.storage.UpdateTrade(trade); err != nil {
-			logger.Error("Failed to update trade: %v", err)
-		}
-
-		// Update daily stats
-		te.updateDailyStats(trade)
-
-		logger.Info("Position closed for user %d: %s @ %.5f (Reason: %s, Profit: %.2f)", te.userID, pos.Symbol, pos.CurrentPrice, reason, profit)
 	}
 
 	te.logCommand("AUTO_CLOSE", pos.ID, "SUCCESS", fmt.Sprintf("Position closed at %s", reason))

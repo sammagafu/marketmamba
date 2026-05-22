@@ -39,7 +39,13 @@ async function submit() {
 </template>
 
 <style scoped>
-.email-login { margin-top: 1rem; text-align: left; }
+.email-login {
+  margin-top: 1rem;
+  text-align: left;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
 .login-title { font-weight: 600; margin-bottom: 0.75rem; text-align: center; }
 .field { margin-bottom: 0.75rem; }
 button { width: 100%; margin-top: 0.25rem; }

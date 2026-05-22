@@ -38,8 +38,13 @@ type PaymentRecord struct {
 }
 
 type UserStats struct {
-	TotalUsers            int `json:"total_users"`
-	ActiveSubscriptions   int `json:"active_subscriptions"`
-	AutoTradingUsers      int `json:"auto_trading_users"`
-	NewUsersLast7Days     int `json:"new_users_last_7_days"`
+	TotalUsers          int     `json:"total_users"`
+	ActiveSubscriptions int     `json:"active_subscriptions"`
+	AutoTradingUsers    int     `json:"auto_trading_users"`
+	NewUsersLast7Days   int     `json:"new_users_last_7_days"`
+	TotalTrades         int     `json:"total_trades"`
+	OpenTrades          int     `json:"open_trades"`
+	ClosedTrades        int     `json:"closed_trades"`
+	TradesLast24h       int     `json:"trades_last_24h"`
+	NetProfitClosed     float64 `json:"net_profit_closed"`
 }

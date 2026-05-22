@@ -105,27 +105,31 @@ func (v *RiskValidator) validateSignal(signal *models.TradeSignal) error {
 	return nil
 }
 
-// validateRiskRewardRatio checks if signal meets minimum risk-reward ratio
+// validateRiskRewardRatio checks if signal meets minimum risk-reward ratio.
 func (v *RiskValidator) validateRiskRewardRatio(signal *models.TradeSignal) error {
-	var risk, reward float64
+	if signal.RiskRewardRatio > 0 {
+		if signal.RiskRewardRatio < v.settings.RiskRewardRatio {
+			return fmt.Errorf("risk-reward ratio %.2f is below minimum %.2f", signal.RiskRewardRatio, v.settings.RiskRewardRatio)
+		}
+		return nil
+	}
 
+	entry := (signal.StopLoss + signal.TakeProfit) / 2
+	var riskDist, rewardDist float64
 	if signal.Type == "BUY" {
-		risk = signal.TakeProfit - signal.StopLoss
-		reward = signal.TakeProfit - signal.StopLoss
+		riskDist = entry - signal.StopLoss
+		rewardDist = signal.TakeProfit - entry
 	} else {
-		risk = signal.StopLoss - signal.TakeProfit
-		reward = signal.StopLoss - signal.TakeProfit
+		riskDist = signal.StopLoss - entry
+		rewardDist = entry - signal.TakeProfit
 	}
-
-	if risk <= 0 {
-		return fmt.Errorf("invalid risk calculation")
+	if riskDist <= 0 || rewardDist <= 0 {
+		return fmt.Errorf("invalid stop loss / take profit levels")
 	}
-
-	ratio := reward / risk
+	ratio := rewardDist / riskDist
 	if ratio < v.settings.RiskRewardRatio {
 		return fmt.Errorf("risk-reward ratio %.2f is below minimum %.2f", ratio, v.settings.RiskRewardRatio)
 	}
-
 	return nil
 }
 

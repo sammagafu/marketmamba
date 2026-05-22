@@ -3,6 +3,7 @@ package broker
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 )
 
 // Credentials is a flexible map of broker-specific secrets/settings.
@@ -11,7 +12,15 @@ type Credentials map[string]string
 func NewFromProvider(provider string, creds Credentials) (Broker, error) {
 	switch provider {
 	case "mock":
-		return NewMockBroker(10000), nil
+		bal := 10000.0
+		if creds != nil {
+			if s := creds["initial_balance"]; s != "" {
+				if v, err := strconv.ParseFloat(s, 64); err == nil && v > 0 {
+					bal = v
+				}
+			}
+		}
+		return NewMockBroker(bal), nil
 	case "oanda":
 		return nil, fmt.Errorf("OANDA adapter is not implemented yet — use Mock for now")
 	case "metaapi":

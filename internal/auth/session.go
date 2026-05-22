@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const defaultSessionTTL = 7 * 24 * time.Hour
+const defaultSessionTTL = 365 * 24 * time.Hour
 
 // Issue creates a signed session token for a Telegram user ID.
 func Issue(secret string, telegramID int64, ttl time.Duration) (string, error) {

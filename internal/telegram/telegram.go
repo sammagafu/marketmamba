@@ -84,6 +84,11 @@ func (tb *TelegramBot) processMessage(msg *tgbotapi.Message) {
 		return
 	}
 
+	if tb.isUserBlocked(userID) {
+		tb.sendMessage(chatID, "❌ Your account is blocked. Contact support.")
+		return
+	}
+
 	text := strings.TrimSpace(msg.Text)
 	parts := strings.Fields(text)
 	if len(parts) == 0 {
@@ -106,10 +111,14 @@ func (tb *TelegramBot) processMessage(msg *tgbotapi.Message) {
 		tb.handleMyPlan(chatID, userID)
 	case "/status":
 		tb.handleStatus(chatID, userID)
+	case "/broker":
+		tb.handleBroker(chatID, userID, parts[1:])
 	case "/balance":
 		tb.handleBalance(chatID, userID)
 	case "/positions":
 		tb.handlePositions(chatID, userID)
+	case "/trades":
+		tb.handleTrades(chatID, userID)
 	case "/open":
 		tb.handleOpen(chatID, userID, parts[1:])
 	case "/close":
@@ -144,6 +153,14 @@ func (tb *TelegramBot) isLegacyAllowed(userID int64) bool {
 	return tb.cfg.IsAdmin(userID)
 }
 
+func (tb *TelegramBot) isUserBlocked(userID int64) bool {
+	if tb.cfg.IsAdmin(userID) {
+		return false
+	}
+	u, err := tb.storage.GetUserByTelegramID(userID)
+	return err == nil && u != nil && u.IsBlocked
+}
+
 func (tb *TelegramBot) requireTrading(chatID, userID int64) bool {
 	ok, msg := tb.subs.CanTrade(userID)
 	if !ok {
@@ -173,13 +190,17 @@ Welcome! Your Telegram ID: `+"`%d`"+`
 /subscribe — plans & payment info
 /myplan — your subscription
 /status — bot status
+/broker — connect demo broker
 
 *Trading:*
-/open /close /positions /balance
+/open /close /positions /trades /balance
 /autostart /autostop — automation
 
 *Web dashboard:*
 https://marketmamba.kkooapp.co.tz
+
+*Signals:*
+Active subscribers receive trade alerts in this chat.
 
 ⚠️ Forex trading is high risk.`, userID, planLine)
 	tb.sendMessage(chatID, msg)
@@ -221,12 +242,14 @@ func (tb *TelegramBot) handleAdmin(chatID, adminID int64, parts []string) {
 		return
 	}
 	if len(parts) < 2 {
-		tb.sendMessage(chatID, "Admin: /admin stats | /admin activate <telegram_id> <days>")
+		tb.sendMessage(chatID, "Admin: /admin stats | /admin activate <id> <days> | /admin signal")
 		return
 	}
 	switch parts[1] {
 	case "stats":
 		tb.handleAdminStats(chatID)
+	case "signal":
+		tb.handleAdminSignal(chatID)
 	case "activate":
 		if len(parts) < 4 {
 			tb.sendMessage(chatID, "Usage: /admin activate <telegram_id> <days>")
@@ -300,7 +323,7 @@ func (tb *TelegramBot) handleBalance(chatID int64, userID int64) {
 	}
 	b, err := tb.brokerFor(userID)
 	if err != nil {
-		tb.sendMessage(chatID, "❌ Broker not configured. Use the web dashboard to connect Mock (Demo).")
+		tb.sendMessage(chatID, "❌ Broker not configured. Use /broker connect or the web dashboard.")
 		return
 	}
 	balance, _ := b.GetBalance()
@@ -358,7 +381,12 @@ func (tb *TelegramBot) handleOpen(chatID int64, userID int64, args []string) {
 		tb.sendMessage(chatID, fmt.Sprintf("❌ Failed: %v", err))
 		return
 	}
-	tb.sendMessage(chatID, fmt.Sprintf("✅ Trade opened: %s %s — ID %s", symbol, orderType, pos.ID))
+	pos.UserID = userID
+	if err := tb.logTradeOpen(userID, pos, "MANUAL"); err != nil {
+		tb.sendMessage(chatID, fmt.Sprintf("✅ Opened %s %s — ID %s\n⚠️ Log failed: %v", symbol, orderType, pos.ID, err))
+		return
+	}
+	tb.sendMessage(chatID, fmt.Sprintf("✅ Trade opened & logged: %s %s — ID %s", symbol, orderType, pos.ID))
 }
 
 func (tb *TelegramBot) handleClose(chatID int64, userID int64, args []string) {
@@ -374,11 +402,23 @@ func (tb *TelegramBot) handleClose(chatID int64, userID int64, args []string) {
 		tb.sendMessage(chatID, "❌ Broker not configured")
 		return
 	}
-	if err := b.ClosePosition(args[0]); err != nil {
+	posID := args[0]
+	exitPrice := 0.0
+	if pos, err := b.GetPositionByID(posID); err == nil && pos != nil {
+		exitPrice = pos.CurrentPrice
+		if exitPrice <= 0 {
+			exitPrice = pos.EntryPrice
+		}
+	}
+	if err := b.ClosePosition(posID); err != nil {
 		tb.sendMessage(chatID, fmt.Sprintf("❌ %v", err))
 		return
 	}
-	tb.sendMessage(chatID, "✅ Position closed")
+	if err := tb.logTradeClose(userID, posID, exitPrice, "MANUAL"); err != nil {
+		tb.sendMessage(chatID, "✅ Closed on broker\n⚠️ Log failed: "+err.Error())
+		return
+	}
+	tb.sendMessage(chatID, "✅ Position closed & logged")
 }
 
 func (tb *TelegramBot) handleCloseAll(chatID int64, userID int64) {
@@ -390,8 +430,16 @@ func (tb *TelegramBot) handleCloseAll(chatID int64, userID int64) {
 		tb.sendMessage(chatID, "❌ Broker not configured")
 		return
 	}
+	positions, _ := b.GetOpenPositions()
 	_ = b.CloseAllPositions()
-	tb.sendMessage(chatID, "✅ All positions closed")
+	for _, pos := range positions {
+		exit := pos.CurrentPrice
+		if exit <= 0 {
+			exit = pos.EntryPrice
+		}
+		_ = tb.logTradeClose(userID, pos.ID, exit, "MANUAL")
+	}
+	tb.sendMessage(chatID, "✅ All positions closed & logged")
 }
 
 func (tb *TelegramBot) handlePause(chatID int64, userID int64) {

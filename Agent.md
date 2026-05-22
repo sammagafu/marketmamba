@@ -2,6 +2,10 @@
 
 Use this file as the index for deployment and admin setup.
 
+## Brand assets
+
+Logos: `web/src/assets/images/` (`Logo-landscape.svg`, `Logo-potrait.svg`, `favcon.svg`). Favicon: `web/public/favicon.svg`. Rebuild with `make web-build`.
+
 ## Documentation
 
 | Doc | Purpose |
@@ -9,6 +13,7 @@ Use this file as the index for deployment and admin setup.
 | [VPS_DEPLOY.md](./VPS_DEPLOY.md) | **Start here** — `.env` variables, copy-paste VPS commands, nginx, SSL, admin seed |
 | [WEB_DEPLOY.md](./WEB_DEPLOY.md) | Web dashboard, Telegram login, local dev proxy |
 | [README.md](./README.md) | Project overview |
+| [docs/HOW_WE_TRADE.md](./docs/HOW_WE_TRADE.md) | Signals, indicators, risk — aligns with landing copy |
 
 ## Quick VPS commands
 
@@ -33,3 +38,15 @@ docker compose -p marketmamba logs -f app
 ## Telegram admin
 
 Same Telegram ID must be in `TELEGRAM_ADMIN_USER_IDS`. Commands: `/admin stats`, `/admin activate <id> <days>`.
+
+## Access control (admin vs trader)
+
+| Role | How assigned | API |
+|------|----------------|-----|
+| **admin** | Telegram ID in `TELEGRAM_ADMIN_USER_IDS` (+ email seed for web) | `/api/v1/admin/*` |
+| **user** (trader) | Anyone who logs in via Telegram | `/api/v1/status`, brokers, trades, etc. |
+
+- `/auth/me` returns `role`, `permissions`, `is_blocked`, `can_trade`.
+- Blocked users get **403** on protected routes (admins are never blocked).
+- Web dashboard hides admin panel unless `admin:stats` permission; trader badge vs admin badge in header.
+- Details: [docs/ACL.md](./docs/ACL.md)

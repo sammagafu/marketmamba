@@ -17,6 +17,7 @@ import (
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
+	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
 	"forex-bot/internal/telegram"
@@ -89,8 +90,17 @@ func main() {
 	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker)
 	coordinator.Start(ctx)
 
+	if cfg.App.SignalBroadcastEnabled {
+		pub := signals.NewPublisher(
+			db, subs, tgBot, validator,
+			cfg.App.SignalBroadcastSymbol, cfg.SignalBroadcastInterval(),
+			cfg.App.SignalMinStrength,
+		)
+		pub.Start(ctx)
+	}
+
 	if cfg.App.EnableWeb {
-		apiServer := api.NewServer(cfg, db, subs, usersSvc, resolveBroker)
+		apiServer := api.NewServer(cfg, db, subs, usersSvc, resolveBroker, tgBot, validator)
 		go func() {
 			addr := ":" + cfg.App.HTTPPort
 			logger.Info("Web dashboard listening on %s", addr)

@@ -8,21 +8,15 @@ export function apiTargetLabel() {
 export function loadSession() {
   return {
     sessionToken: localStorage.getItem('mm_session') || '',
-    apiKey: localStorage.getItem('mm_api_key') || '',
-    telegramId: localStorage.getItem('mm_telegram_id') || '',
   }
 }
 
 export function saveTelegramSession(sessionToken, telegramId) {
   localStorage.setItem('mm_session', sessionToken)
-  localStorage.setItem('mm_telegram_id', String(telegramId))
+  if (telegramId) {
+    localStorage.setItem('mm_telegram_id', String(telegramId))
+  }
   localStorage.removeItem('mm_api_key')
-}
-
-export function saveLegacySession(apiKey, telegramId) {
-  localStorage.setItem('mm_api_key', apiKey)
-  localStorage.setItem('mm_telegram_id', telegramId)
-  localStorage.removeItem('mm_session')
 }
 
 export function clearSession() {
@@ -32,8 +26,7 @@ export function clearSession() {
 }
 
 export function isLoggedIn() {
-  const s = loadSession()
-  return !!(s.sessionToken || (s.telegramId && s.apiKey))
+  return !!loadSession().sessionToken
 }
 
 export async function loginWithEmail(email, password) {
@@ -73,13 +66,13 @@ export async function loginWithTelegram(user) {
 }
 
 export async function api(path, { method = 'GET', body } = {}) {
-  const { sessionToken, apiKey, telegramId } = loadSession()
-  const headers = { 'Content-Type': 'application/json' }
-  if (sessionToken) {
-    headers['Authorization'] = `Bearer ${sessionToken}`
-  } else {
-    if (apiKey) headers['X-API-Key'] = apiKey
-    if (telegramId) headers['X-Telegram-User-Id'] = telegramId
+  const { sessionToken } = loadSession()
+  if (!sessionToken) {
+    throw new Error('Not logged in — use Telegram or admin email login')
+  }
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${sessionToken}`,
   }
   const res = await fetch(API + path, {
     method,

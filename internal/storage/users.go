@@ -93,6 +93,15 @@ func (ps *PostgresStorage) GetUserStats() (*models.UserStats, error) {
 	_ = ps.db.QueryRow(
 		`SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'`,
 	).Scan(&stats.NewUsersLast7Days)
+	_ = ps.db.QueryRow(`SELECT COUNT(*) FROM trades`).Scan(&stats.TotalTrades)
+	_ = ps.db.QueryRow(`SELECT COUNT(*) FROM trades WHERE status = 'OPEN'`).Scan(&stats.OpenTrades)
+	_ = ps.db.QueryRow(`SELECT COUNT(*) FROM trades WHERE status = 'CLOSED'`).Scan(&stats.ClosedTrades)
+	_ = ps.db.QueryRow(
+		`SELECT COUNT(*) FROM trades WHERE created_at > NOW() - INTERVAL '24 hours'`,
+	).Scan(&stats.TradesLast24h)
+	_ = ps.db.QueryRow(
+		`SELECT COALESCE(SUM(profit), 0) FROM trades WHERE status = 'CLOSED' AND profit IS NOT NULL`,
+	).Scan(&stats.NetProfitClosed)
 	return stats, nil
 }
 
@@ -122,6 +131,24 @@ func (ps *PostgresStorage) CreatePaymentRecord(p *models.PaymentRecord) error {
 		p.ID, p.UserID, p.Amount, p.Currency, p.Method, p.Reference, p.Notes, p.CreatedByAdmin, p.CreatedAt,
 	)
 	return err
+}
+
+// ListSignalSubscriberTelegramIDs returns non-blocked users who may receive signal alerts.
+func (ps *PostgresStorage) ListSignalSubscriberTelegramIDs() ([]int64, error) {
+	rows, err := ps.db.Query(`SELECT telegram_id FROM users WHERE is_blocked = FALSE ORDER BY telegram_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (ps *PostgresStorage) ListRecentUsers(limit int) ([]*models.User, error) {

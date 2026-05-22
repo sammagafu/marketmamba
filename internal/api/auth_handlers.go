@@ -41,12 +41,7 @@ func (s *Server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, _ := s.storage.GetUserByTelegramID(req.ID)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"session_token": token,
-		"telegram_id":   req.ID,
-		"user":          user,
-		"is_admin":      s.cfg.IsAdmin(req.ID),
-	})
+	writeJSON(w, http.StatusOK, s.loginResponse(token, req.ID, user, ""))
 }
 
 // Telegram Login Widget redirect (data-auth-url) — avoids iframe domain issues.
@@ -101,18 +96,13 @@ func (s *Server) handleTelegramOIDCLogin(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	token, err := auth.Issue(s.sessionSecret(), ou.TelegramID, 7*24*time.Hour)
+	token, err := auth.Issue(s.sessionSecret(), ou.TelegramID, s.cfg.SessionTTL())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	user, _ := s.storage.GetUserByTelegramID(ou.TelegramID)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"session_token": token,
-		"telegram_id":   ou.TelegramID,
-		"user":          user,
-		"is_admin":      s.cfg.IsAdmin(ou.TelegramID),
-	})
+	writeJSON(w, http.StatusOK, s.loginResponse(token, ou.TelegramID, user, ""))
 }
 
 func (s *Server) completeTelegramLogin(data telegramlogin.LoginData) (string, error) {
@@ -122,7 +112,7 @@ func (s *Server) completeTelegramLogin(data telegramlogin.LoginData) (string, er
 	if _, err := s.users.RegisterFromLogin(data.ID, data.Username, data.FirstName, data.LastName); err != nil {
 		return "", err
 	}
-	return auth.Issue(s.sessionSecret(), data.ID, 7*24*time.Hour)
+	return auth.Issue(s.sessionSecret(), data.ID, s.cfg.SessionTTL())
 }
 
 type emailLoginRequest struct {
@@ -153,19 +143,39 @@ func (s *Server) handleEmailLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "not configured as Telegram admin — add telegram id to TELEGRAM_ADMIN_USER_IDS")
 		return
 	}
+	if _, err := s.users.RegisterFromLogin(admin.TelegramID, "", "Admin", ""); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	user, _ := s.storage.GetUserByTelegramID(admin.TelegramID)
-	token, err := auth.Issue(s.sessionSecret(), admin.TelegramID, 7*24*time.Hour)
+	token, err := auth.Issue(s.sessionSecret(), admin.TelegramID, s.cfg.SessionTTL())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := s.loginResponse(token, admin.TelegramID, user, admin.Email)
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) loginResponse(token string, telegramID int64, user interface{}, email string) map[string]interface{} {
+	profile := s.buildACLProfile(telegramID)
+	out := map[string]interface{}{
 		"session_token": token,
-		"telegram_id":   admin.TelegramID,
-		"email":         admin.Email,
+		"telegram_id":   telegramID,
 		"user":          user,
-		"is_admin":      true,
-	})
+		"role":          profile.Role,
+		"is_admin":      profile.IsAdmin,
+		"permissions":   profile.Permissions,
+		"is_blocked":    profile.IsBlocked,
+		"can_trade":     profile.CanTrade,
+	}
+	if profile.TradeMessage != "" {
+		out["trade_message"] = profile.TradeMessage
+	}
+	if email != "" {
+		out["email"] = email
+	}
+	return out
 }
 
 func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
@@ -175,10 +185,16 @@ func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	}
 	uid := userIDFrom(r)
 	user, _ := s.storage.GetUserByTelegramID(uid)
+	profile := s.buildACLProfile(uid)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"telegram_id": uid,
-		"user":        user,
-		"is_admin":    s.cfg.IsAdmin(uid),
+		"telegram_id":   uid,
+		"user":          user,
+		"role":          profile.Role,
+		"is_admin":      profile.IsAdmin,
+		"permissions":   profile.Permissions,
+		"is_blocked":    profile.IsBlocked,
+		"can_trade":     profile.CanTrade,
+		"trade_message": profile.TradeMessage,
 	})
 }
 

@@ -1,17 +1,16 @@
 package api
 
 import (
-	"context"
 	"embed"
 	"io/fs"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"forex-bot/internal/auth"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/risk"
+	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
 	"forex-bot/internal/users"
@@ -27,18 +26,22 @@ type Server struct {
 	storage       *storage.PostgresStorage
 	subs          *subscription.Service
 	users         *users.Service
-	resolveBroker BrokerResolver
-	mux           *http.ServeMux
+	resolveBroker    BrokerResolver
+	signalNotifier   signals.Notifier
+	riskValidator    *risk.RiskValidator
+	mux              *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, usersSvc *users.Service, resolve BrokerResolver) *Server {
+func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator) *Server {
 	s := &Server{
-		cfg:           cfg,
-		storage:       store,
-		subs:          subs,
-		users:         usersSvc,
-		resolveBroker: resolve,
-		mux:           http.NewServeMux(),
+		cfg:              cfg,
+		storage:          store,
+		subs:             subs,
+		users:            usersSvc,
+		resolveBroker:    resolve,
+		signalNotifier:   notifier,
+		riskValidator:    validator,
+		mux:              http.NewServeMux(),
 	}
 	s.routes()
 	return s
@@ -58,12 +61,15 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/status", s.withUser(s.handleStatus))
 	s.mux.HandleFunc("/api/v1/account", s.withUser(s.handleAccount))
 	s.mux.HandleFunc("/api/v1/positions", s.withUser(s.handlePositions))
+	s.mux.HandleFunc("/api/v1/trades", s.withUser(s.handleTrades))
 	s.mux.HandleFunc("/api/v1/subscription", s.withUser(s.handleSubscription))
 	s.mux.HandleFunc("/api/v1/admin/stats", s.withAdmin(s.handleAdminStats))
+	s.mux.HandleFunc("/api/v1/admin/trades", s.withAdmin(s.handleAdminTrades))
 	s.mux.HandleFunc("/api/v1/admin/users", s.withAdmin(s.handleAdminUsers))
 	s.mux.HandleFunc("/api/v1/admin/activate", s.withAdmin(s.handleAdminActivate))
 	s.mux.HandleFunc("/api/v1/admin/users/block", s.withAdmin(s.handleAdminBlockUser))
 	s.mux.HandleFunc("/api/v1/admin/users/revoke", s.withAdmin(s.handleAdminRevokeSubscription))
+	s.mux.HandleFunc("/api/v1/admin/signals/broadcast", s.withAdmin(s.handleAdminBroadcastSignal))
 
 	s.registerStatic()
 }
@@ -132,6 +138,8 @@ func serveFile(w http.ResponseWriter, fsys fs.FS, name string) {
 
 func (s *Server) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Required for Telegram Login popup (oauth.telegram.org postMessage).
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
 		origin := r.Header.Get("Origin")
 		if origin != "" && s.allowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -156,10 +164,6 @@ func (s *Server) allowedOrigin(origin string) bool {
 	return false
 }
 
-type ctxKey int
-
-const userIDKey ctxKey = 1
-
 func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.cfg.App.WebAPIKey != "" {
@@ -176,45 +180,6 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) withUser(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var uid int64
-		var err error
-
-		if token := bearerToken(r); token != "" {
-			uid, err = auth.Verify(s.sessionSecret(), token)
-			if err != nil {
-				writeError(w, http.StatusUnauthorized, "invalid or expired session — log in again")
-				return
-			}
-		} else {
-			if s.cfg.App.WebAPIKey != "" {
-				key := r.Header.Get("X-API-Key")
-				if key == "" {
-					key = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-				}
-				if key != s.cfg.App.WebAPIKey {
-					writeError(w, http.StatusUnauthorized, "log in with Telegram or provide API key")
-					return
-				}
-			}
-			raw := r.Header.Get("X-Telegram-User-Id")
-			if raw == "" {
-				writeError(w, http.StatusUnauthorized, "log in with Telegram")
-				return
-			}
-			uid, err = strconv.ParseInt(raw, 10, 64)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid telegram user id")
-				return
-			}
-		}
-
-		ctx := context.WithValue(r.Context(), userIDKey, uid)
-		next(w, r.WithContext(ctx))
-	}
-}
-
 func bearerToken(r *http.Request) string {
 	h := r.Header.Get("Authorization")
 	if strings.HasPrefix(h, "Bearer ") {
@@ -224,17 +189,6 @@ func bearerToken(r *http.Request) string {
 		}
 	}
 	return r.Header.Get("X-Session-Token")
-}
-
-func (s *Server) withAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return s.withUser(func(w http.ResponseWriter, r *http.Request) {
-		adminID := r.Context().Value(userIDKey).(int64)
-		if !s.cfg.IsAdmin(adminID) {
-			writeError(w, http.StatusForbidden, "admin access required")
-			return
-		}
-		next(w, r)
-	})
 }
 
 func userIDFrom(r *http.Request) int64 {

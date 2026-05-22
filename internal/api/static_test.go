@@ -10,7 +10,7 @@ import (
 
 func TestStaticAssetsRoute(t *testing.T) {
 	cfg := &config.Config{App: config.AppConfig{EnableWeb: true}}
-	s := NewServer(cfg, nil, nil, nil, nil)
+	s := NewServer(cfg, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/assets/index-BVvY9Vuq.css", nil)
 	rec := httptest.NewRecorder()

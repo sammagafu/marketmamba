@@ -24,7 +24,9 @@ func SupportedBrokerTypes() []BrokerType {
 			Name:        "Mock (Demo)",
 			Description: "Simulated account for testing. No real money.",
 			Status:      "live",
-			Fields:      []Field{},
+			Fields: []Field{
+				{Key: "initial_balance", Label: "Starting balance (USD)", Type: "text", Required: false, Placeholder: "10000"},
+			},
 		},
 		{
 			ID:          "oanda",

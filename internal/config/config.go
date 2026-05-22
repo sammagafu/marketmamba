@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -55,7 +56,12 @@ type AppConfig struct {
 	FreeTrialDays               int
 	SubscriptionContactMessage  string
 	WebSessionSecret            string
+	WebSessionTTLDays           int
 	PublicSiteURL               string // https://marketmamba.kkooapp.co.tz — Telegram Login callback origin
+	SignalBroadcastEnabled      bool
+	SignalBroadcastIntervalSec  int
+	SignalBroadcastSymbol       string
+	SignalMinStrength           float64
 }
 
 func LoadConfig() (*Config, error) {
@@ -96,7 +102,12 @@ func LoadConfig() (*Config, error) {
 			FreeTrialDays:              parseInt(getEnv("FREE_TRIAL_DAYS", "30")),
 			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "Free testing period. Contact @codexxl on Telegram to extend after launch."),
 			WebSessionSecret:           getEnv("WEB_SESSION_SECRET", ""),
+			WebSessionTTLDays:          parseInt(getEnv("WEB_SESSION_TTL_DAYS", "365")),
 			PublicSiteURL:              strings.TrimRight(getEnv("PUBLIC_SITE_URL", "https://marketmamba.kkooapp.co.tz"), "/"),
+			SignalBroadcastEnabled:     getEnv("SIGNAL_BROADCAST_ENABLED", "true") == "true",
+			SignalBroadcastIntervalSec: parseInt(getEnv("SIGNAL_BROADCAST_INTERVAL_SEC", "300")),
+			SignalBroadcastSymbol:      getEnv("SIGNAL_BROADCAST_SYMBOL", "EURUSD"),
+			SignalMinStrength:          parseFloat(getEnv("SIGNAL_MIN_STRENGTH", "0.7")),
 		},
 	}
 
@@ -150,6 +161,23 @@ func parseInt(s string) int {
 
 func parseAdminIDs(s string) []int64 {
 	return parseUserIDs(s)
+}
+
+// SessionTTL returns how long web login sessions remain valid.
+func (c *Config) SessionTTL() time.Duration {
+	days := c.App.WebSessionTTLDays
+	if days <= 0 {
+		days = 365
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
+func (c *Config) SignalBroadcastInterval() time.Duration {
+	sec := c.App.SignalBroadcastIntervalSec
+	if sec < 60 {
+		sec = 60
+	}
+	return time.Duration(sec) * time.Second
 }
 
 func (c *Config) IsAdmin(telegramID int64) bool {
