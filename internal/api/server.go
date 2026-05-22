@@ -81,20 +81,19 @@ func (s *Server) registerStatic() {
 		log.Printf("[web] index.html missing in embed — run: make web-build")
 		return
 	}
-	// Vite emits dist/assets/*; URL /assets/foo maps to embed path assets/foo (no StripPrefix).
-	assetHandler := http.FileServer(http.FS(staticFS))
-	s.mux.HandleFunc("GET /{$}", spaHandler(staticFS, assetHandler))
+	// GET /{$} only matches "/" in Go 1.22+ mux — assets need their own pattern.
+	assets := http.FileServer(http.FS(staticFS))
+	s.mux.HandleFunc("GET /assets/{path...}", func(w http.ResponseWriter, r *http.Request) {
+		assets.ServeHTTP(w, r)
+	})
+	s.mux.HandleFunc("GET /{$}", spaHandler(staticFS))
 	log.Printf("[web] dashboard static files ready")
 }
 
-func spaHandler(staticFS fs.FS, assets http.Handler) http.HandlerFunc {
+func spaHandler(staticFS fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
-			return
-		}
-		if strings.HasPrefix(r.URL.Path, "/assets/") {
-			assets.ServeHTTP(w, r)
 			return
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/")
@@ -112,7 +111,7 @@ func spaHandler(staticFS fs.FS, assets http.Handler) http.HandlerFunc {
 
 // serveSPA kept for tests / compatibility
 func serveSPA(staticFS fs.FS) http.HandlerFunc {
-	return spaHandler(staticFS, http.FileServer(http.FS(staticFS)))
+	return spaHandler(staticFS)
 }
 
 func serveFile(w http.ResponseWriter, fsys fs.FS, name string) {
