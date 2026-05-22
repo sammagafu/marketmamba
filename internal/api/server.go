@@ -81,17 +81,19 @@ func (s *Server) registerStatic() {
 		log.Printf("[web] index.html missing in embed — run: make web-build")
 		return
 	}
-	assets := http.FileServer(http.FS(staticFS))
-	s.mux.Handle("/assets/", http.StripPrefix("/assets/", assets))
-	s.mux.HandleFunc("GET /{$}", serveSPA(staticFS))
-	s.mux.HandleFunc("GET /", serveSPA(staticFS))
+	assetHandler := http.StripPrefix("/assets/", http.FileServer(http.FS(staticFS)))
+	s.mux.HandleFunc("GET /{$}", spaHandler(staticFS, assetHandler))
 	log.Printf("[web] dashboard static files ready")
 }
 
-func serveSPA(staticFS fs.FS) http.HandlerFunc {
+func spaHandler(staticFS fs.FS, assets http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			assets.ServeHTTP(w, r)
 			return
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/")
@@ -105,6 +107,11 @@ func serveSPA(staticFS fs.FS) http.HandlerFunc {
 		}
 		serveFile(w, staticFS, "index.html")
 	}
+}
+
+// serveSPA kept for tests / compatibility
+func serveSPA(staticFS fs.FS) http.HandlerFunc {
+	return spaHandler(staticFS, http.StripPrefix("/assets/", http.FileServer(http.FS(staticFS))))
 }
 
 func serveFile(w http.ResponseWriter, fsys fs.FS, name string) {
