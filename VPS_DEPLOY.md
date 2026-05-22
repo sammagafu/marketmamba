@@ -57,7 +57,7 @@ scp /Users/codexl-008/iloveprojects/forex-bot/.env \
 | `MARKET_DATA_API_KEY` | [Twelve Data](https://twelvedata.com/) API key (live FX quotes) |
 | `MAX_DAILY_LOSS` | e.g. `0.02` (2% of balance) — enforced by executor |
 
-**OANDA** (practice first): connect on dashboard with provider `oanda`, credentials `api_token`, `account_id`, `practice=true`. Switch to live with `practice=false` and live token.
+**Live broker:** OANDA only works where they accept clients (not Tanzania and several other regions). If signup is blocked, use **Mock (Demo)** on the dashboard for automation testing, and **Twelve Data** (`MARKET_DATA_API_KEY`) for live quotes on signals/decisions. For real execution, use an **MT4/MT5 broker** in your country + **MetaAPI** (adapter `coming_soon` — ask to prioritize).
 
 **Health / monitoring:**
 

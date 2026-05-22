@@ -31,7 +31,7 @@ func SupportedBrokerTypes() []BrokerType {
 		{
 			ID:          "oanda",
 			Name:        "OANDA",
-			Description: "OANDA v20 REST API (practice or live).",
+			Description: "OANDA v20 REST API (practice or live). Not available in all countries — use Mock or MetaAPI if signup is blocked.",
 			Status:      "live",
 			Fields: []Field{
 				{Key: "api_token", Label: "API Token", Type: "password", Required: true},
@@ -42,11 +42,17 @@ func SupportedBrokerTypes() []BrokerType {
 		{
 			ID:          "metaapi",
 			Name:        "MetaAPI (MT4 / MT5)",
-			Description: "Connect MetaTrader via MetaAPI cloud bridge.",
-			Status:      "coming_soon",
+			Description: "Your MT broker via MetaAPI — Deriv, Exness, IC Markets, etc. Token from app.metaapi.cloud.",
+			Status:      "live",
 			Fields: []Field{
-				{Key: "token", Label: "MetaAPI Token", Type: "password", Required: true},
-				{Key: "account_id", Label: "Account ID", Type: "text", Required: true},
+				{Key: "metaapi_token", Label: "MetaAPI token", Type: "password", Required: true, Placeholder: "From app.metaapi.cloud → API access"},
+				{Key: "login", Label: "MT login (account number)", Type: "text", Required: true, Placeholder: "201620473"},
+				{Key: "password", Label: "MT password", Type: "password", Required: true},
+				{Key: "server", Label: "MT server name", Type: "text", Required: true, Placeholder: "Deriv-Demo"},
+				{Key: "platform", Label: "Platform (mt5 or mt4)", Type: "text", Required: false, Placeholder: "mt5"},
+				{Key: "metaapi_account_id", Label: "MetaAPI account id (optional)", Type: "text", Required: false, Placeholder: "UUID if already linked in MetaAPI"},
+				{Key: "region", Label: "MetaAPI region", Type: "text", Required: false, Placeholder: "new-york"},
+				{Key: "keywords", Label: "Broker keywords (optional)", Type: "text", Required: false, Placeholder: "Deriv.com Limited"},
 			},
 		},
 		{
@@ -74,7 +80,7 @@ func SupportedBrokerTypes() []BrokerType {
 
 func IsLiveProvider(provider string) bool {
 	switch provider {
-	case "mock", "oanda":
+	case "mock", "oanda", "metaapi":
 		return true
 	default:
 		return false

@@ -47,10 +47,10 @@ func TestSaveConnectionOANDA(t *testing.T) {
 	}
 }
 
-func TestSaveConnectionRejectsComingSoon(t *testing.T) {
+func TestSaveConnectionRejectsAlpaca(t *testing.T) {
 	store := &memConnStore{}
-	err := SaveConnection(store, "test-encryption-key-32bytes!!", 123, "metaapi", "", Credentials{"token": "x", "account_id": "y"})
+	err := SaveConnection(store, "test-encryption-key-32bytes!!", 123, "alpaca", "", Credentials{"api_key": "x", "api_secret": "y"})
 	if err == nil {
-		t.Fatal("expected error for metaapi")
+		t.Fatal("expected error for alpaca")
 	}
 }

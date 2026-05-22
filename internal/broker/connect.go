@@ -21,7 +21,7 @@ func SaveConnection(store ConnectionStore, encryptionKey string, userID int64, p
 		return fmt.Errorf("broker %q is not available yet — use mock (demo)", provider)
 	}
 	if label == "" {
-		label = defaultLabel(provider)
+		label = defaultLabel(provider, creds)
 	}
 	if err := ValidateCredentials(provider, creds); err != nil {
 		return err
@@ -47,10 +47,15 @@ func SaveConnection(store ConnectionStore, encryptionKey string, userID int64, p
 	return store.UpsertBrokerConnection(conn)
 }
 
-func defaultLabel(provider string) string {
+func defaultLabel(provider string, creds Credentials) string {
 	switch provider {
 	case "mock":
 		return "Demo account"
+	case "metaapi":
+		if s := credsHintServer(creds); s != "" {
+			return "MT5 " + s
+		}
+		return "MetaAPI MT5"
 	default:
 		return provider
 	}
@@ -60,6 +65,9 @@ func defaultLabel(provider string) string {
 func ValidateCredentials(provider string, creds Credentials) error {
 	if creds == nil {
 		creds = Credentials{}
+	}
+	if provider == "metaapi" {
+		return ValidateMetaAPICredentials(creds)
 	}
 	for _, bt := range SupportedBrokerTypes() {
 		if bt.ID != provider {
