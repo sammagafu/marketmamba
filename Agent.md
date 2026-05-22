@@ -14,6 +14,7 @@ Logos: `web/src/assets/images/` (`Logo-landscape.svg`, `Logo-potrait.svg`, `favc
 | [WEB_DEPLOY.md](./WEB_DEPLOY.md) | Web dashboard, Telegram login, local dev proxy |
 | [README.md](./README.md) | Project overview |
 | [docs/HOW_WE_TRADE.md](./docs/HOW_WE_TRADE.md) | Signals, indicators, risk — aligns with landing copy |
+| [docs/MINI_APP.md](./docs/MINI_APP.md) | Telegram Mini App, 5-day trial, 10 USDT/month Binance |
 
 ## Quick VPS commands
 

@@ -10,6 +10,7 @@ import (
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
 	"forex-bot/internal/pairs"
+	"forex-bot/internal/payments"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
@@ -26,6 +27,7 @@ type Server struct {
 	cfg           *config.Config
 	storage       *storage.PostgresStorage
 	subs          *subscription.Service
+	payments      *payments.Service
 	users         *users.Service
 	resolveBroker    BrokerResolver
 	signalNotifier   signals.Notifier
@@ -34,11 +36,12 @@ type Server struct {
 	mux              *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator, pairSvc *pairs.Service) *Server {
+func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, paySvc *payments.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator, pairSvc *pairs.Service) *Server {
 	s := &Server{
 		cfg:              cfg,
 		storage:          store,
 		subs:             subs,
+		payments:         paySvc,
 		users:            usersSvc,
 		resolveBroker:    resolve,
 		signalNotifier:   notifier,
@@ -56,6 +59,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/auth/telegram", s.handleTelegramLogin)
 	s.mux.HandleFunc("/api/v1/auth/telegram/oidc", s.handleTelegramOIDCLogin)
 	s.mux.HandleFunc("/api/v1/auth/telegram/callback", s.handleTelegramLoginCallback)
+	s.mux.HandleFunc("/api/v1/auth/telegram/webapp", s.handleTelegramWebAppAuth)
 	s.mux.HandleFunc("/api/v1/auth/email", s.handleEmailLogin)
 	s.mux.HandleFunc("/api/v1/auth/me", s.withUser(s.handleAuthMe))
 	s.mux.HandleFunc("/api/v1/brokers/types", s.withUser(s.handleBrokerTypes))
@@ -66,6 +70,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/positions", s.withUser(s.handlePositions))
 	s.mux.HandleFunc("/api/v1/trades", s.withUser(s.handleTrades))
 	s.mux.HandleFunc("/api/v1/subscription", s.withUser(s.handleSubscription))
+	s.mux.HandleFunc("/api/v1/miniapp/dashboard", s.withUser(s.handleMiniAppDashboard))
+	s.mux.HandleFunc("/api/v1/payments/binance/order", s.withUser(s.handlePaymentOrderCreate))
+	s.mux.HandleFunc("/api/v1/payments/binance/confirm", s.withUser(s.handlePaymentOrderConfirm))
+	s.mux.HandleFunc("/api/v1/payments/binance/webhook", s.handleBinancePayWebhook)
 	s.mux.HandleFunc("/api/v1/trading-pairs", s.withUser(s.handleTradingPairs))
 	s.mux.HandleFunc("/api/v1/admin/stats", s.withAdmin(s.handleAdminStats))
 	s.mux.HandleFunc("/api/v1/admin/trades", s.withAdmin(s.handleAdminTrades))

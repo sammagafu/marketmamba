@@ -16,6 +16,19 @@ type Config struct {
 	Broker   BrokerConfig
 	Risk     RiskConfig
 	App      AppConfig
+	Payments PaymentsConfig
+}
+
+// PaymentsConfig — Binance USDT subscription (10 USDT / month after trial).
+type PaymentsConfig struct {
+	SubscriptionPriceUSDT float64
+	SubscriptionDays      int
+	BinancePayAPIKey      string
+	BinancePaySecret      string
+	BinancePayCertSN      string
+	BinanceUID            string // manual USDT transfer to Binance account
+	BinanceNetwork        string // TRC20, BEP20, etc.
+	MiniAppURL            string
 }
 
 type TelegramConfig struct {
@@ -108,9 +121,9 @@ func LoadConfig() (*Config, error) {
 			BrokerEncryptionKey:        getEnv("BROKER_ENCRYPTION_KEY", ""),
 			EnableWeb:                  getEnv("ENABLE_WEB", "true") == "true",
 			PublicMode:                 getEnv("PUBLIC_MODE", "true") == "true",
-			SubscriptionRequired:       getEnv("SUBSCRIPTION_REQUIRED", "false") == "true",
-			FreeTrialDays:              parseInt(getEnv("FREE_TRIAL_DAYS", "30")),
-			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "Free testing period. Contact @codexxl on Telegram to extend after launch."),
+			SubscriptionRequired:       getEnv("SUBSCRIPTION_REQUIRED", "true") == "true",
+			FreeTrialDays:              parseInt(getEnv("FREE_TRIAL_DAYS", "5")),
+			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "5-day free trial, then 10 USDT/month via Binance. Open the Mini App to subscribe."),
 			WebSessionSecret:           getEnv("WEB_SESSION_SECRET", ""),
 			WebSessionTTLDays:          parseInt(getEnv("WEB_SESSION_TTL_DAYS", "365")),
 			PublicSiteURL:              strings.TrimRight(getEnv("PUBLIC_SITE_URL", "https://marketmamba.kkooapp.co.tz"), "/"),
@@ -127,6 +140,19 @@ func LoadConfig() (*Config, error) {
 			MarketDataAPIKey:           getEnv("MARKET_DATA_API_KEY", ""),
 			AutoTradeRequiresApproval: getEnv("AUTO_TRADE_REQUIRES_APPROVAL", "false") == "true",
 		},
+		Payments: PaymentsConfig{
+			SubscriptionPriceUSDT: parseFloat(getEnv("SUBSCRIPTION_PRICE_USDT", "10")),
+			SubscriptionDays:      parseInt(getEnv("SUBSCRIPTION_DAYS", "30")),
+			BinancePayAPIKey:      getEnv("BINANCE_PAY_API_KEY", ""),
+			BinancePaySecret:      getEnv("BINANCE_PAY_SECRET", ""),
+			BinancePayCertSN:      getEnv("BINANCE_PAY_CERT_SN", ""),
+			BinanceUID:            getEnv("BINANCE_PAY_UID", ""),
+			BinanceNetwork:        getEnv("BINANCE_PAY_NETWORK", "TRC20"),
+			MiniAppURL:            strings.TrimRight(getEnv("MINI_APP_URL", getEnv("PUBLIC_SITE_URL", "https://marketmamba.kkooapp.co.tz")), "/"),
+		},
+	}
+	if cfg.Payments.MiniAppURL == "" {
+		cfg.Payments.MiniAppURL = cfg.App.PublicSiteURL
 	}
 	cfg.App.SignalSymbols = ParseSignalSymbols(
 		getEnv("SIGNAL_BROADCAST_SYMBOLS", "EURUSD,BTCUSD"),

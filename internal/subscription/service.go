@@ -73,7 +73,7 @@ func (s *Service) EnsureTrial(userID int64) error {
 		Plan:        "trial",
 		Status:      "active",
 		ExpiresAt:   &exp,
-		Notes:       "Auto trial — testing period",
+		Notes:       fmt.Sprintf("Free trial — %d days", s.cfg.App.FreeTrialDays),
 		ActivatedBy: "system",
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -107,6 +107,63 @@ func (s *Service) ActivateManual(userID int64, days int, plan, notes string, adm
 		return nil, err
 	}
 	return sub, nil
+}
+
+// ActivatePaid extends or creates a paid monthly plan after USDT payment.
+func (s *Service) ActivatePaid(userID int64, days int, plan, notes string) (*models.Subscription, error) {
+	if days <= 0 {
+		days = 30
+	}
+	if plan == "" {
+		plan = "monthly"
+	}
+	existing, _ := s.store.GetActiveSubscription(userID)
+	start := time.Now()
+	if existing != nil && existing.ExpiresAt != nil && existing.ExpiresAt.After(start) {
+		start = *existing.ExpiresAt
+	}
+	exp := start.AddDate(0, 0, days)
+	sub := &models.Subscription{
+		ID:          utils.GenerateID("sub"),
+		UserID:      userID,
+		Plan:        plan,
+		Status:      "active",
+		ExpiresAt:   &exp,
+		Notes:       notes,
+		ActivatedBy: "binance_usdt",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	if err := s.store.DeactivateSubscriptions(userID); err != nil {
+		return nil, err
+	}
+	if err := s.store.CreateSubscription(sub); err != nil {
+		return nil, err
+	}
+	return sub, nil
+}
+
+// SubscriptionStatus returns trial/paid state for UI.
+func (s *Service) SubscriptionStatus(userID int64) map[string]interface{} {
+	sub, _ := s.store.GetActiveSubscription(userID)
+	canTrade, msg := s.CanTrade(userID)
+	out := map[string]interface{}{
+		"can_trade":             canTrade,
+		"message":               msg,
+		"subscription_required": s.cfg.App.SubscriptionRequired,
+		"trial_days":            s.cfg.App.FreeTrialDays,
+		"price_usdt":            s.cfg.Payments.SubscriptionPriceUSDT,
+	}
+	if sub != nil {
+		out["subscription"] = sub
+		out["plan"] = sub.Plan
+		out["status"] = sub.Status
+		if sub.ExpiresAt != nil {
+			out["expires_at"] = sub.ExpiresAt.Format(time.RFC3339)
+			out["days_left"] = int(time.Until(*sub.ExpiresAt).Hours() / 24)
+		}
+	}
+	return out
 }
 
 func (s *Service) GetForUser(userID int64) (*models.Subscription, error) {

@@ -20,6 +20,7 @@ import (
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/pairs"
+	"forex-bot/internal/payments"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
@@ -72,6 +73,7 @@ func main() {
 	}
 
 	subs := subscription.NewService(db, cfg)
+	paySvc := payments.NewService(db, subs, cfg)
 	pairSvc := pairs.NewService(db, cfg)
 	usersSvc := users.NewService(db, subs, cfg)
 
@@ -87,6 +89,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Telegram bot initialization failed: %v", err)
 	}
+	tgBot.ConfigureMiniApp(cfg.Payments.MiniAppURL)
 
 	outcomeSvc := feedback.NewService(tgBot, db, subs, cfg.SignalSymbols())
 	tgBot.SetOutcomeNotifier(outcomeSvc)
@@ -140,7 +143,7 @@ func main() {
 	}
 
 	if cfg.App.EnableWeb {
-		apiServer := api.NewServer(cfg, db, subs, usersSvc, resolveBroker, tgBot, validator, pairSvc)
+		apiServer := api.NewServer(cfg, db, subs, paySvc, usersSvc, resolveBroker, tgBot, validator, pairSvc)
 		go func() {
 			addr := ":" + cfg.App.HTTPPort
 			logger.Info("Web dashboard listening on %s", addr)

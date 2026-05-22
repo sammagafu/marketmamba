@@ -41,7 +41,12 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"telegram_login_domain":  s.cfg.Telegram.LoginDomain,
 		"public_site_url":        s.cfg.App.PublicSiteURL,
 		"telegram_login_enabled": s.cfg.Telegram.BotToken != "",
+		"mini_app_url":           s.cfg.Payments.MiniAppURL,
 		"session_ttl_days":       s.cfg.App.WebSessionTTLDays,
+		"subscription_price_usdt": s.cfg.Payments.SubscriptionPriceUSDT,
+		"subscription_days":      s.cfg.Payments.SubscriptionDays,
+		"trial_days":             s.cfg.App.FreeTrialDays,
+		"binance_pay_enabled":    s.payments != nil && s.cfg.Payments.BinancePayAPIKey != "",
 		"signal_broadcast":       s.cfg.App.SignalBroadcastEnabled,
 		"signal_symbols":         s.cfg.SignalSymbols(),
 	}
