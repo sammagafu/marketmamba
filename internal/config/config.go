@@ -256,14 +256,11 @@ func (c *Config) IsAdmin(telegramID int64) bool {
 	return false
 }
 
-func botClientID(explicit, botToken string) string {
-	if strings.TrimSpace(explicit) != "" {
-		return strings.TrimSpace(explicit)
-	}
-	if i := strings.Index(botToken, ":"); i > 0 {
-		return botToken[:i]
-	}
-	return ""
+// botClientID is only set when TELEGRAM_BOT_CLIENT_ID is explicit (OIDC / popup login).
+// Do not derive from the bot token — that forces OIDC and hides the Login Widget when
+// Web Login is not configured in @BotFather.
+func botClientID(explicit, _ string) string {
+	return strings.TrimSpace(explicit)
 }
 
 func parseCSV(s string) []string {

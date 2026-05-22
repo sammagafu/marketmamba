@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { loginWithTelegramOIDC, loginWithTelegram } from '../api'
 
 const props = defineProps({
@@ -14,12 +14,18 @@ const emit = defineEmits(['logged-in', 'error'])
 const widgetRef = ref(null)
 const loadError = ref('')
 const useOidc = ref(false)
+const widgetReady = ref(false)
 let scriptEl = null
 
 const productionLoginUrl = () => props.publicSiteUrl.replace(/\/$/, '')
 
 function currentHost() {
   return typeof window !== 'undefined' ? window.location.hostname : ''
+}
+
+function hasOidcClient() {
+  const id = String(props.clientId || '').trim()
+  return id !== '' && id !== '0'
 }
 
 async function handleOidc(data) {
@@ -66,26 +72,28 @@ function openOidcPopup() {
     emit('error', 'Telegram sign-in is still loading — wait a moment and try again')
     return
   }
-  window.Telegram.Login.auth(
-    { client_id: id, request_access: ['write'] },
-    handleOidc,
-  )
+  window.Telegram.Login.auth({ client_id: id, request_access: ['write'] }, handleOidc)
+}
+
+function teardown() {
+  scriptEl?.remove()
+  scriptEl = null
+  if (widgetRef.value) widgetRef.value.innerHTML = ''
+  widgetReady.value = false
 }
 
 function mountOidcWidget() {
   useOidc.value = true
+  teardown()
   scriptEl = document.createElement('script')
   scriptEl.async = true
   scriptEl.src = 'https://oauth.telegram.org/js/telegram-login.js?5'
-  scriptEl.setAttribute('data-client-id', props.clientId)
-  scriptEl.setAttribute('data-onauth', 'mmTelegramOIDC(data)')
-  scriptEl.setAttribute('data-request-access', 'write')
-  scriptEl.setAttribute('data-lang', 'en')
   scriptEl.onload = () => {
     const id = Number(props.clientId)
     if (window.Telegram?.Login?.init) {
       window.Telegram.Login.init({ client_id: id, request_access: ['write'] }, handleOidc)
     }
+    widgetReady.value = true
   }
   scriptEl.onerror = () => {
     loadError.value =
@@ -94,79 +102,130 @@ function mountOidcWidget() {
   document.head.appendChild(scriptEl)
 }
 
-function mountLegacyWidget() {
+async function mountLegacyWidget() {
   useOidc.value = false
+  teardown()
+  loadError.value = ''
+  await nextTick()
   const el = widgetRef.value
   if (!el) return
 
-  const callbackUrl = `${productionLoginUrl()}/api/v1/auth/telegram/callback`
+  const bot = props.botUsername.replace('@', '').trim()
+  if (!bot) {
+    loadError.value = 'Telegram bot username not configured (TELEGRAM_BOT_USERNAME).'
+    return
+  }
 
   scriptEl = document.createElement('script')
   scriptEl.async = true
   scriptEl.src = 'https://telegram.org/js/telegram-widget.js?22'
-  scriptEl.setAttribute('data-telegram-login', props.botUsername.replace('@', ''))
+  scriptEl.setAttribute('data-telegram-login', bot)
   scriptEl.setAttribute('data-size', 'large')
   scriptEl.setAttribute('data-radius', '10')
   scriptEl.setAttribute('data-userpic', 'false')
   scriptEl.setAttribute('data-request-access', 'write')
-  scriptEl.setAttribute('data-auth-url', callbackUrl)
+  scriptEl.setAttribute('data-onauth', 'mmTelegramLegacy(user)')
+  scriptEl.onload = () => {
+    widgetReady.value = true
+    // If domain is not whitelisted, Telegram leaves the slot empty — keep branded button visible.
+    setTimeout(() => {
+      if (!el.querySelector('iframe, a, button')) {
+        loadError.value =
+          `Telegram button did not load. In @BotFather → your bot → Bot Settings → Domain, add: ${props.loginDomain}`
+      }
+    }, 2500)
+  }
   scriptEl.onerror = () => {
-    loadError.value = 'Could not load Telegram Login Widget.'
+    loadError.value = 'Could not load Telegram Login Widget (blocked or offline).'
   }
   el.appendChild(scriptEl)
+}
+
+async function setupLogin() {
+  loadError.value = ''
+  if (hasOidcClient()) {
+    mountOidcWidget()
+  } else if (props.botUsername) {
+    await mountLegacyWidget()
+  } else {
+    loadError.value = 'Telegram bot not configured on server (TELEGRAM_BOT_TOKEN).'
+  }
+}
+
+function onSignInClick() {
+  if (useOidc.value) {
+    openOidcPopup()
+    return
+  }
+  const el = widgetRef.value
+  const official =
+    el?.querySelector('iframe') ||
+    el?.querySelector('a') ||
+    el?.querySelector('button')
+  if (official) {
+    official.click()
+    return
+  }
+  emit(
+    'error',
+    loadError.value ||
+      `Add https://${props.loginDomain} in @BotFather → Bot Settings → Domain, then refresh.`,
+  )
 }
 
 onMounted(async () => {
   window.mmTelegramOIDC = handleOidc
   window.mmTelegramLegacy = handleLegacy
-
-  if (props.clientId) {
-    mountOidcWidget()
-  } else if (props.botUsername) {
-    await nextTick()
-    mountLegacyWidget()
-  } else {
-    loadError.value = 'Telegram bot not configured on server (TELEGRAM_BOT_TOKEN).'
-  }
+  await setupLogin()
 })
+
+watch(
+  () => [props.clientId, props.botUsername],
+  () => {
+    setupLogin()
+  },
+)
 
 onUnmounted(() => {
   delete window.mmTelegramOIDC
   delete window.mmTelegramLegacy
-  scriptEl?.remove()
-  if (widgetRef.value) widgetRef.value.innerHTML = ''
+  teardown()
 })
 </script>
 
 <template>
   <div class="telegram-login">
     <button
-      v-if="useOidc && clientId"
       type="button"
       class="telegram-signin-btn"
-      :disabled="!!loadError"
-      @click="openOidcPopup"
+      :class="{ secondary: !useOidc && widgetReady }"
+      @click="onSignInClick"
     >
       <svg class="telegram-signin-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path
           fill="currentColor"
-          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.12.27z"
+          d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"
         />
       </svg>
       Log in with Telegram
     </button>
 
-    <div v-else ref="widgetRef" class="telegram-widget-slot" />
+    <div
+      v-if="!useOidc"
+      ref="widgetRef"
+      class="telegram-widget-slot"
+      :class="{ 'has-widget': widgetReady }"
+    />
 
     <p v-if="loadError" class="warn-box">{{ loadError }}</p>
     <p v-else-if="currentHost() && currentHost() !== loginDomain" class="warn-box">
       For production login, open
       <a :href="productionLoginUrl()" class="prod-link">{{ productionLoginUrl() }}</a>
-      or add <code>https://{{ loginDomain }}</code> in @BotFather → Web Login.
+      or add <code>https://{{ loginDomain }}</code> in @BotFather → Domain (widget) or Web Login (OIDC).
     </p>
 
-    <p v-if="!clientId && botUsername && !loadError" class="muted widget-hint">
-      Official Telegram button · @{{ botUsername.replace('@', '') }}
+    <p v-if="!useOidc && botUsername && !loadError" class="muted widget-hint">
+      Official Telegram button appears below when your domain is linked · @{{ botUsername.replace('@', '') }}
     </p>
   </div>
 </template>
@@ -182,17 +241,18 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  min-height: 0;
+  margin-top: 0.75rem;
+}
+
+.telegram-widget-slot.has-widget {
   min-height: 52px;
-  margin-bottom: 0.75rem;
 }
 
-/* Official OIDC button hook (SDK may replace/enhance) */
-.telegram-widget-slot :deep(.tg-auth-button) {
-  font-family: var(--font-sans);
-  cursor: pointer;
+.telegram-widget-slot :deep(iframe) {
+  max-width: 100%;
 }
 
-/* Branded fallback / primary button (Telegram blue) */
 .telegram-signin-btn {
   display: inline-flex;
   align-items: center;
@@ -200,7 +260,7 @@ onUnmounted(() => {
   gap: 0.6rem;
   width: 100%;
   max-width: 100%;
-  min-height: var(--touch-min);
+  min-height: var(--touch-min, 48px);
   padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 10px;
@@ -214,10 +274,26 @@ onUnmounted(() => {
   box-shadow: 0 4px 14px rgba(42, 171, 238, 0.35);
 }
 
+.telegram-signin-btn.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  font-size: 0.9rem;
+  min-height: 42px;
+  margin-bottom: 0.25rem;
+}
+
 .telegram-signin-btn:hover {
   background: #229ed9;
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(42, 171, 238, 0.45);
+}
+
+.telegram-signin-btn.secondary:hover {
+  background: var(--surface-raised);
+  transform: none;
+  box-shadow: none;
 }
 
 .telegram-signin-icon {

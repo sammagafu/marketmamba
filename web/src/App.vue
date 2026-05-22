@@ -332,15 +332,18 @@ onMounted(async () => {
     @error="(m) => { message = m; messageOk = false }"
   >
     <TelegramLogin
-      v-if="config?.telegram_login_enabled !== false"
+      v-if="config && config.telegram_login_enabled !== false"
       :bot-username="botUsername"
-      :client-id="config?.telegram_client_id || ''"
-      :login-domain="config?.telegram_login_domain || 'marketmamba.kkooapp.co.tz'"
-      :public-site-url="config?.public_site_url || 'https://marketmamba.kkooapp.co.tz'"
+      :client-id="config.telegram_client_id || ''"
+      :login-domain="config.telegram_login_domain || 'marketmamba.kkooapp.co.tz'"
+      :public-site-url="config.public_site_url || 'https://marketmamba.kkooapp.co.tz'"
       @logged-in="onLoggedIn"
       @error="(m) => { message = m; messageOk = false }"
     />
-    <p v-else class="muted portal-no-tg">Telegram login is not configured on the server.</p>
+    <p v-else-if="config && config.telegram_login_enabled === false" class="muted portal-no-tg">
+      Telegram login is not configured on the server (set TELEGRAM_BOT_TOKEN).
+    </p>
+    <p v-else class="muted portal-no-tg">Loading sign-in…</p>
     <hr class="divider" />
     <EmailAdminLogin
       @logged-in="onLoggedIn"

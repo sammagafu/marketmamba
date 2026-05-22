@@ -547,7 +547,7 @@ onUnmounted(() => {
 
 /* Login portal */
 .portal-col {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .portal {
