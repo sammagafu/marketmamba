@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
+	"forex-bot/internal/api"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
 	"forex-bot/internal/logger"
@@ -46,15 +48,17 @@ func main() {
 
 	logger.Info("Database connected successfully")
 
-	// Initialize broker
-	var b broker.Broker
-	if cfg.Broker.Provider == "mock" {
-		b = broker.NewMockBroker(10000) // Mock broker with $10k balance
-		logger.Info("Using mock broker for development")
-	} else {
-		logger.Error("Unknown broker provider: %s", cfg.Broker.Provider)
-		log.Fatalf("Unknown broker provider: %s", cfg.Broker.Provider)
+	primaryUserID := int64(0)
+	if len(cfg.Telegram.AllowedUserIDs) > 0 {
+		primaryUserID = cfg.Telegram.AllowedUserIDs[0]
 	}
+
+	b, providerName, err := broker.ResolveBroker(db, primaryUserID, cfg.App.BrokerEncryptionKey, cfg.Broker.Provider)
+	if err != nil {
+		logger.Error("Failed to resolve broker: %v", err)
+		log.Fatalf("Broker resolution failed: %v", err)
+	}
+	logger.Info("Using broker provider: %s", providerName)
 
 	// Initialize risk validator with default settings
 	riskSettings := &models.RiskSettings{
@@ -92,9 +96,19 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	if cfg.App.EnableWeb && primaryUserID > 0 {
+		apiServer := api.NewServer(cfg, db, b, primaryUserID)
+		go func() {
+			addr := ":" + cfg.App.HTTPPort
+			logger.Info("Web dashboard listening on %s", addr)
+			if err := http.ListenAndServe(addr, apiServer.Handler()); err != nil {
+				logger.Error("Web server error: %v", err)
+			}
+		}()
+	}
+
 	// Initialize trading services for the first allowed user (for testing)
-	if len(cfg.Telegram.AllowedUserIDs) > 0 {
-		primaryUserID := cfg.Telegram.AllowedUserIDs[0]
+	if primaryUserID > 0 {
 
 		// Create trading executor
 		executor := trading.NewTradeExecutor(b, db, validator, primaryUserID)

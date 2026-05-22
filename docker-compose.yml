@@ -33,6 +33,13 @@ services:
       MAX_TRADES_PER_DAY: 10
       APP_ENV: ${APP_ENV:-development}
       PORT: 8080
+      HTTP_PORT: ${HTTP_PORT:-8090}
+      ENABLE_WEB: ${ENABLE_WEB:-true}
+      WEB_API_KEY: ${WEB_API_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://marketmamba.kkooapp.co.tz}
+      BROKER_ENCRYPTION_KEY: ${BROKER_ENCRYPTION_KEY}
+    ports:
+      - "127.0.0.1:8090:8090"
     depends_on:
       postgres:
         condition: service_healthy

@@ -39,8 +39,13 @@ type RiskConfig struct {
 }
 
 type AppConfig struct {
-	Environment string
-	Port        string
+	Environment           string
+	Port                  string
+	HTTPPort              string
+	WebAPIKey             string
+	CORSOrigins           []string
+	BrokerEncryptionKey   string
+	EnableWeb             bool
 }
 
 func LoadConfig() (*Config, error) {
@@ -65,8 +70,13 @@ func LoadConfig() (*Config, error) {
 			RiskRewardRatio:  parseFloat(getEnv("RISK_REWARD_RATIO", "1.0")),
 		},
 		App: AppConfig{
-			Environment: getEnv("APP_ENV", "development"),
-			Port:        getEnv("PORT", "8080"),
+			Environment:         getEnv("APP_ENV", "development"),
+			Port:                getEnv("PORT", "8080"),
+			HTTPPort:            getEnv("HTTP_PORT", "8090"),
+			WebAPIKey:           getEnv("WEB_API_KEY", ""),
+			CORSOrigins:         parseCSV(getEnv("CORS_ORIGINS", "https://marketmamba.kkooapp.co.tz,http://localhost:8090")),
+			BrokerEncryptionKey: getEnv("BROKER_ENCRYPTION_KEY", ""),
+			EnableWeb:           getEnv("ENABLE_WEB", "true") == "true",
 		},
 	}
 
@@ -116,4 +126,15 @@ func parseFloat(s string) float64 {
 func parseInt(s string) int {
 	i, _ := strconv.Atoi(s)
 	return i
+}
+
+func parseCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
