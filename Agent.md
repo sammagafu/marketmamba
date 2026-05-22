@@ -30,6 +30,12 @@ docker compose -p marketmamba exec app ./seedadmin
 docker compose -p marketmamba logs -f app
 ```
 
+**Copy local `.env` to VPS and rebuild** (from your Mac, SSH key required):
+
+```bash
+bash scripts/copy-env-deploy.sh
+```
+
 ## Admin login (email)
 
 1. On the VPS `.env` set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TELEGRAM_ID` (your Telegram user id).
