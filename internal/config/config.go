@@ -18,8 +18,9 @@ type Config struct {
 }
 
 type TelegramConfig struct {
-	BotToken         string
-	AllowedUserIDs   []int64
+	BotToken       string
+	AllowedUserIDs []int64 // legacy; optional when public
+	AdminUserIDs   []int64
 }
 
 type DatabaseConfig struct {
@@ -39,13 +40,17 @@ type RiskConfig struct {
 }
 
 type AppConfig struct {
-	Environment           string
-	Port                  string
-	HTTPPort              string
-	WebAPIKey             string
-	CORSOrigins           []string
-	BrokerEncryptionKey   string
-	EnableWeb             bool
+	Environment                 string
+	Port                        string
+	HTTPPort                    string
+	WebAPIKey                   string
+	CORSOrigins                 []string
+	BrokerEncryptionKey         string
+	EnableWeb                   bool
+	PublicMode                  bool
+	SubscriptionRequired        bool
+	FreeTrialDays               int
+	SubscriptionContactMessage  string
 }
 
 func LoadConfig() (*Config, error) {
@@ -55,6 +60,7 @@ func LoadConfig() (*Config, error) {
 		Telegram: TelegramConfig{
 			BotToken:       getEnv("TELEGRAM_BOT_TOKEN", ""),
 			AllowedUserIDs: parseUserIDs(getEnv("TELEGRAM_ALLOWED_USER_IDS", "")),
+			AdminUserIDs:   parseAdminIDs(getEnv("TELEGRAM_ADMIN_USER_IDS", getEnv("TELEGRAM_ALLOWED_USER_IDS", ""))),
 		},
 		Database: DatabaseConfig{
 			URL: getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/forexbot"),
@@ -70,13 +76,17 @@ func LoadConfig() (*Config, error) {
 			RiskRewardRatio:  parseFloat(getEnv("RISK_REWARD_RATIO", "1.0")),
 		},
 		App: AppConfig{
-			Environment:         getEnv("APP_ENV", "development"),
-			Port:                getEnv("PORT", "8080"),
-			HTTPPort:            getEnv("HTTP_PORT", "8090"),
-			WebAPIKey:           getEnv("WEB_API_KEY", ""),
-			CORSOrigins:         parseCSV(getEnv("CORS_ORIGINS", "https://marketmamba.kkooapp.co.tz,http://localhost:8090")),
-			BrokerEncryptionKey: getEnv("BROKER_ENCRYPTION_KEY", ""),
-			EnableWeb:           getEnv("ENABLE_WEB", "true") == "true",
+			Environment:                getEnv("APP_ENV", "development"),
+			Port:                       getEnv("PORT", "8080"),
+			HTTPPort:                   getEnv("HTTP_PORT", "8090"),
+			WebAPIKey:                  getEnv("WEB_API_KEY", ""),
+			CORSOrigins:                parseCSV(getEnv("CORS_ORIGINS", "https://marketmamba.kkooapp.co.tz,http://localhost:8090,http://localhost:5173")),
+			BrokerEncryptionKey:        getEnv("BROKER_ENCRYPTION_KEY", ""),
+			EnableWeb:                  getEnv("ENABLE_WEB", "true") == "true",
+			PublicMode:                 getEnv("PUBLIC_MODE", "true") == "true",
+			SubscriptionRequired:       getEnv("SUBSCRIPTION_REQUIRED", "false") == "true",
+			FreeTrialDays:              parseInt(getEnv("FREE_TRIAL_DAYS", "30")),
+			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "Free testing period. Contact @codexxl on Telegram to extend after launch."),
 		},
 	}
 
@@ -91,8 +101,8 @@ func (c *Config) Validate() error {
 	if c.Telegram.BotToken == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
 	}
-	if len(c.Telegram.AllowedUserIDs) == 0 {
-		return fmt.Errorf("TELEGRAM_ALLOWED_USER_IDS is required")
+	if !c.App.PublicMode && len(c.Telegram.AllowedUserIDs) == 0 {
+		return fmt.Errorf("TELEGRAM_ALLOWED_USER_IDS is required when PUBLIC_MODE=false")
 	}
 	if c.Database.URL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
@@ -126,6 +136,19 @@ func parseFloat(s string) float64 {
 func parseInt(s string) int {
 	i, _ := strconv.Atoi(s)
 	return i
+}
+
+func parseAdminIDs(s string) []int64 {
+	return parseUserIDs(s)
+}
+
+func (c *Config) IsAdmin(telegramID int64) bool {
+	for _, id := range c.Telegram.AdminUserIDs {
+		if id == telegramID {
+			return true
+		}
+	}
+	return false
 }
 
 func parseCSV(s string) []string {

@@ -9,86 +9,101 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"forex-bot/internal/broker"
+	"forex-bot/internal/config"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/storage"
+	"forex-bot/internal/subscription"
+	"forex-bot/internal/users"
 )
 
+type BrokerResolver func(userID int64) (broker.Broker, error)
+
 type TelegramBot struct {
-	api          *tgbotapi.BotAPI
-	allowedUsers []int64
-	broker       broker.Broker
-	storage      storage.Storage
-	validator    *risk.RiskValidator
+	api           *tgbotapi.BotAPI
+	cfg           *config.Config
+	storage       storage.Storage
+	validator     *risk.RiskValidator
+	users         *users.Service
+	subs          *subscription.Service
+	resolveBroker BrokerResolver
 }
 
-func NewTelegramBot(token string, allowedUsers []int64, b broker.Broker, s storage.Storage, v *risk.RiskValidator) (*TelegramBot, error) {
-	api, err := tgbotapi.NewBotAPI(token)
+func NewTelegramBot(
+	cfg *config.Config,
+	brokerResolver BrokerResolver,
+	s storage.Storage,
+	v *risk.RiskValidator,
+	u *users.Service,
+	sub *subscription.Service,
+) (*TelegramBot, error) {
+	api, err := tgbotapi.NewBotAPI(cfg.Telegram.BotToken)
 	if err != nil {
 		return nil, err
 	}
-
 	return &TelegramBot{
-		api:          api,
-		allowedUsers: allowedUsers,
-		broker:       b,
-		storage:      s,
-		validator:    v,
+		api:           api,
+		cfg:           cfg,
+		storage:       s,
+		validator:     v,
+		users:         u,
+		subs:          sub,
+		resolveBroker: brokerResolver,
 	}, nil
 }
 
-func (tb *TelegramBot) isAllowed(userID int64) bool {
-	for _, id := range tb.allowedUsers {
-		if id == userID {
-			return true
-		}
-	}
-	return false
-}
-
 func (tb *TelegramBot) Start() error {
-	logger.Info("Telegram bot started: @%s", tb.api.Self.UserName)
+	logger.Info("Telegram bot started: @%s (public=%v)", tb.api.Self.UserName, tb.cfg.App.PublicMode)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
-
 	updates := tb.api.GetUpdatesChan(u)
 
 	for update := range updates {
 		if update.Message == nil {
 			continue
 		}
-
-		if !tb.isAllowed(update.Message.From.ID) {
-			tb.sendMessage(update.Message.Chat.ID, "❌ Unauthorized access")
-			logger.Warn("Unauthorized access attempt from user %d", update.Message.From.ID)
-			continue
-		}
-
-		tb.handleMessage(update.Message)
+		tb.processMessage(update.Message)
 	}
-
 	return nil
 }
 
-func (tb *TelegramBot) handleMessage(msg *tgbotapi.Message) {
+func (tb *TelegramBot) processMessage(msg *tgbotapi.Message) {
 	userID := msg.From.ID
 	chatID := msg.Chat.ID
-	text := strings.TrimSpace(msg.Text)
 
+	if tb.cfg.App.PublicMode {
+		if _, err := tb.users.RegisterFromTelegram(msg.From); err != nil {
+			logger.Error("Register user %d: %v", userID, err)
+		}
+		_ = tb.users.Touch(userID)
+	} else if !tb.isLegacyAllowed(userID) {
+		tb.sendMessage(chatID, "❌ This bot is private. Contact the administrator.")
+		logger.Warn("Private mode reject user %d", userID)
+		return
+	}
+
+	text := strings.TrimSpace(msg.Text)
 	parts := strings.Fields(text)
 	if len(parts) == 0 {
 		return
 	}
-
 	command := parts[0]
-
 	logger.Info("User %d executed command: %s", userID, command)
+
+	if strings.HasPrefix(command, "/admin") {
+		tb.handleAdmin(chatID, userID, parts)
+		return
+	}
 
 	switch command {
 	case "/start":
-		tb.handleStart(chatID)
+		tb.handleStart(chatID, userID)
+	case "/subscribe":
+		tb.handleSubscribe(chatID, userID)
+	case "/myplan":
+		tb.handleMyPlan(chatID, userID)
 	case "/status":
 		tb.handleStatus(chatID, userID)
 	case "/balance":
@@ -120,34 +135,137 @@ func (tb *TelegramBot) handleMessage(msg *tgbotapi.Message) {
 	}
 }
 
-func (tb *TelegramBot) handleStart(chatID int64) {
-	msg := `🐍 *Market Mamba*
+func (tb *TelegramBot) isLegacyAllowed(userID int64) bool {
+	for _, id := range tb.cfg.Telegram.AllowedUserIDs {
+		if id == userID {
+			return true
+		}
+	}
+	return tb.cfg.IsAdmin(userID)
+}
 
-*Manual Trading:*
-/open <symbol> <type> <qty> <sl> <tp> - Open trade
-/close <positionID> - Close position
-/closeall - Close all positions
-/pause - Pause all trading
-/resume - Resume trading
+func (tb *TelegramBot) requireTrading(chatID, userID int64) bool {
+	ok, msg := tb.subs.CanTrade(userID)
+	if !ok {
+		tb.sendMessage(chatID, "🔒 "+msg)
+		return false
+	}
+	return true
+}
 
-*Automated Trading:*
-/autostart - Start automated trading
-/autostop - Stop automated trading
-/autostatus - Check automation status
+func (tb *TelegramBot) brokerFor(userID int64) (broker.Broker, error) {
+	return tb.resolveBroker(userID)
+}
 
-*Information:*
-/status - Bot and trading status
-/balance - Account balance
-/positions - Open positions
-/risk - View risk settings
-/dailyreport - Daily trading report
+func (tb *TelegramBot) handleStart(chatID, userID int64) {
+	sub, _ := tb.subs.GetForUser(userID)
+	planLine := "Trial / testing — no payment required yet."
+	if sub != nil && sub.ExpiresAt != nil {
+		planLine = fmt.Sprintf("Plan: *%s* until %s", sub.Plan, sub.ExpiresAt.Format("2006-01-02"))
+	}
+	msg := fmt.Sprintf(`🐍 *Market Mamba*
 
-*Example Manual Trade:*
-/open EURUSD BUY 1.0 1.0900 1.1000
+Welcome! Your Telegram ID: `+"`%d`"+`
 
-⚠️ *DISCLAIMER*: Forex trading carries high risk. Use this bot responsibly.`
+%s
 
+*Account:*
+/subscribe — plans & payment info
+/myplan — your subscription
+/status — bot status
+
+*Trading:*
+/open /close /positions /balance
+/autostart /autostop — automation
+
+*Web dashboard:*
+https://marketmamba.kkooapp.co.tz
+
+⚠️ Forex trading is high risk.`, userID, planLine)
 	tb.sendMessage(chatID, msg)
+}
+
+func (tb *TelegramBot) handleSubscribe(chatID, userID int64) {
+	msg := fmt.Sprintf(`*Subscription*
+
+We are in *testing* — no payment required right now.
+Your account has a free trial automatically.
+
+When we launch paid plans:
+%s
+
+Your Telegram ID for support: `+"`%d`", tb.cfg.App.SubscriptionContactMessage, userID)
+	tb.sendMessage(chatID, msg)
+}
+
+func (tb *TelegramBot) handleMyPlan(chatID, userID int64) {
+	sub, err := tb.subs.GetForUser(userID)
+	if err != nil || sub == nil {
+		tb.sendMessage(chatID, "No active plan found. Use /start to register.")
+		return
+	}
+	exp := "no expiry"
+	if sub.ExpiresAt != nil {
+		exp = sub.ExpiresAt.Format("2006-01-02 15:04")
+	}
+	tb.sendMessage(chatID, fmt.Sprintf(`*Your plan*
+Plan: %s
+Status: %s
+Expires: %s
+Notes: %s`, sub.Plan, sub.Status, exp, sub.Notes))
+}
+
+func (tb *TelegramBot) handleAdmin(chatID, adminID int64, parts []string) {
+	if !tb.cfg.IsAdmin(adminID) {
+		tb.sendMessage(chatID, "❌ Admin only")
+		return
+	}
+	if len(parts) < 2 {
+		tb.sendMessage(chatID, "Admin: /admin stats | /admin activate <telegram_id> <days>")
+		return
+	}
+	switch parts[1] {
+	case "stats":
+		tb.handleAdminStats(chatID)
+	case "activate":
+		if len(parts) < 4 {
+			tb.sendMessage(chatID, "Usage: /admin activate <telegram_id> <days>")
+			return
+		}
+		targetID, _ := strconv.ParseInt(parts[2], 10, 64)
+		days, _ := strconv.Atoi(parts[3])
+		sub, err := tb.subs.ActivateManual(targetID, days, "manual", "Activated via Telegram admin", adminID)
+		if err != nil {
+			tb.sendMessage(chatID, "❌ "+err.Error())
+			return
+		}
+		exp := "never"
+		if sub.ExpiresAt != nil {
+			exp = sub.ExpiresAt.Format("2006-01-02")
+		}
+		tb.sendMessage(chatID, fmt.Sprintf("✅ Activated user %d until %s", targetID, exp))
+	default:
+		tb.sendMessage(chatID, "Unknown admin command")
+	}
+}
+
+func (tb *TelegramBot) handleAdminStats(chatID int64) {
+	ps, ok := tb.storage.(*storage.PostgresStorage)
+	if !ok {
+		tb.sendMessage(chatID, "❌ internal error")
+		return
+	}
+	stats, err := ps.GetUserStats()
+	if err != nil {
+		tb.sendMessage(chatID, "❌ "+err.Error())
+		return
+	}
+	tb.sendMessage(chatID, fmt.Sprintf(`*Market Mamba stats*
+Total users: %d
+Active subscriptions: %d
+Auto-trading users: %d
+New users (7d): %d`,
+		stats.TotalUsers, stats.ActiveSubscriptions, stats.AutoTradingUsers, stats.NewUsersLast7Days))
 }
 
 func (tb *TelegramBot) handleStatus(chatID int64, userID int64) {
@@ -156,184 +274,147 @@ func (tb *TelegramBot) handleStatus(chatID int64, userID int64) {
 		tb.sendMessage(chatID, "❌ Error fetching bot state")
 		return
 	}
-
 	status := "✅ Active"
 	if botState.IsPaused {
 		status = "⏸️ Paused"
 	}
-
+	ok, _ := tb.subs.CanTrade(userID)
+	subLine := "inactive"
+	if ok {
+		subLine = "active"
+	}
 	msg := fmt.Sprintf(`*Bot Status*
 Status: %s
+Subscription: %s
 Auto Trading: %v
 Daily Loss Hit: %v
 Last Active: %s`,
-		status,
-		botState.AutoTradingActive,
-		botState.DailyLossHit,
+		status, subLine, botState.AutoTradingActive, botState.DailyLossHit,
 		botState.LastActiveAt.Format("2006-01-02 15:04:05"))
-
 	tb.sendMessage(chatID, msg)
 }
 
 func (tb *TelegramBot) handleBalance(chatID int64, userID int64) {
-	balance, err := tb.broker.GetBalance()
-	if err != nil {
-		tb.sendMessage(chatID, "❌ Error fetching balance")
+	if !tb.requireTrading(chatID, userID) {
 		return
 	}
-
-	equity, err := tb.broker.GetEquity()
+	b, err := tb.brokerFor(userID)
 	if err != nil {
-		tb.sendMessage(chatID, "❌ Error fetching equity")
+		tb.sendMessage(chatID, "❌ Broker not configured. Use the web dashboard to connect Mock (Demo).")
 		return
 	}
-
-	msg := fmt.Sprintf(`*Account Balance*
-Balance: $%.2f
-Equity: $%.2f`, balance, equity)
-
-	tb.sendMessage(chatID, msg)
+	balance, _ := b.GetBalance()
+	equity, _ := b.GetEquity()
+	tb.sendMessage(chatID, fmt.Sprintf("*Account Balance*\nBalance: $%.2f\nEquity: $%.2f", balance, equity))
 }
 
 func (tb *TelegramBot) handlePositions(chatID int64, userID int64) {
-	positions, err := tb.broker.GetOpenPositions()
-	if err != nil {
-		tb.sendMessage(chatID, "❌ Error fetching positions")
+	if !tb.requireTrading(chatID, userID) {
 		return
 	}
-
-	if len(positions) == 0 {
+	b, err := tb.brokerFor(userID)
+	if err != nil {
+		tb.sendMessage(chatID, "❌ Broker not configured")
+		return
+	}
+	positions, err := b.GetOpenPositions()
+	if err != nil || len(positions) == 0 {
 		tb.sendMessage(chatID, "No open positions")
 		return
 	}
-
 	msg := "*Open Positions*\n\n"
 	for i, pos := range positions {
-		msg += fmt.Sprintf("%d. %s %s\n", i+1, pos.Symbol, pos.Type)
-		msg += fmt.Sprintf("   Entry: %.5f | SL: %.5f | TP: %.5f\n", pos.EntryPrice, pos.StopLoss, pos.TakeProfit)
-		msg += fmt.Sprintf("   Profit: %.2f (%.2f%%)\n\n", pos.Profit, pos.ProfitPct)
+		msg += fmt.Sprintf("%d. %s %s\n   Entry: %.5f | P/L: %.2f\n", i+1, pos.Symbol, pos.Type, pos.EntryPrice, pos.Profit)
 	}
-
 	tb.sendMessage(chatID, msg)
 }
 
 func (tb *TelegramBot) handleOpen(chatID int64, userID int64, args []string) {
+	if !tb.requireTrading(chatID, userID) {
+		return
+	}
 	if len(args) < 5 {
 		tb.sendMessage(chatID, "❌ Usage: /open <symbol> <BUY|SELL> <quantity> <stopLoss> <takeProfit>")
 		return
 	}
-
+	b, err := tb.brokerFor(userID)
+	if err != nil {
+		tb.sendMessage(chatID, "❌ Broker not configured")
+		return
+	}
 	symbol := strings.ToUpper(args[0])
 	orderType := strings.ToUpper(args[1])
 	qty, _ := strconv.ParseFloat(args[2], 64)
 	sl, _ := strconv.ParseFloat(args[3], 64)
 	tp, _ := strconv.ParseFloat(args[4], 64)
-
-	if qty <= 0 || sl <= 0 || tp <= 0 {
-		tb.sendMessage(chatID, "❌ Invalid parameters")
-		return
-	}
-
-	// Create signal for validation
-	signal := &models.TradeSignal{
-		Symbol:      symbol,
-		Type:        orderType,
-		StopLoss:    sl,
-		TakeProfit:  tp,
-		Strength:    1.0,
-		TriggeredAt: time.Now(),
-	}
-
+	signal := &models.TradeSignal{Symbol: symbol, Type: orderType, StopLoss: sl, TakeProfit: tp, Strength: 1.0, TriggeredAt: time.Now()}
 	botState, _ := tb.storage.GetBotState(userID)
 	if err := tb.validator.ValidateTradeSignal(signal, 10000, 0, 0, 0, botState.IsPaused); err != nil {
 		tb.sendMessage(chatID, fmt.Sprintf("❌ Validation failed: %v", err))
 		return
 	}
-
-	pos, err := tb.broker.OpenMarketOrder(symbol, orderType, qty, sl, tp)
+	pos, err := b.OpenMarketOrder(symbol, orderType, qty, sl, tp)
 	if err != nil {
-		tb.sendMessage(chatID, fmt.Sprintf("❌ Failed to open trade: %v", err))
+		tb.sendMessage(chatID, fmt.Sprintf("❌ Failed: %v", err))
 		return
 	}
-
-	msg := fmt.Sprintf(`✅ Trade Opened
-Symbol: %s
-Type: %s
-Entry: %.5f
-Stop Loss: %.5f
-Take Profit: %.5f
-Position ID: %s`, symbol, orderType, pos.EntryPrice, sl, tp, pos.ID)
-
-	tb.sendMessage(chatID, msg)
-	logger.Info("Trade opened for user %d: %s %s", userID, symbol, orderType)
+	tb.sendMessage(chatID, fmt.Sprintf("✅ Trade opened: %s %s — ID %s", symbol, orderType, pos.ID))
 }
 
 func (tb *TelegramBot) handleClose(chatID int64, userID int64, args []string) {
+	if !tb.requireTrading(chatID, userID) {
+		return
+	}
 	if len(args) < 1 {
 		tb.sendMessage(chatID, "❌ Usage: /close <positionID>")
 		return
 	}
-
-	positionID := args[0]
-	if err := tb.broker.ClosePosition(positionID); err != nil {
-		tb.sendMessage(chatID, fmt.Sprintf("❌ Failed to close position: %v", err))
+	b, err := tb.brokerFor(userID)
+	if err != nil {
+		tb.sendMessage(chatID, "❌ Broker not configured")
 		return
 	}
-
+	if err := b.ClosePosition(args[0]); err != nil {
+		tb.sendMessage(chatID, fmt.Sprintf("❌ %v", err))
+		return
+	}
 	tb.sendMessage(chatID, "✅ Position closed")
-	logger.Info("Position closed for user %d: %s", userID, positionID)
 }
 
 func (tb *TelegramBot) handleCloseAll(chatID int64, userID int64) {
-	if err := tb.broker.CloseAllPositions(); err != nil {
-		tb.sendMessage(chatID, fmt.Sprintf("❌ Failed to close all positions: %v", err))
+	if !tb.requireTrading(chatID, userID) {
 		return
 	}
-
+	b, err := tb.brokerFor(userID)
+	if err != nil {
+		tb.sendMessage(chatID, "❌ Broker not configured")
+		return
+	}
+	_ = b.CloseAllPositions()
 	tb.sendMessage(chatID, "✅ All positions closed")
-	logger.Info("All positions closed for user %d", userID)
 }
 
 func (tb *TelegramBot) handlePause(chatID int64, userID int64) {
-	if err := tb.storage.UpdateBotState(userID, true, false, false); err != nil {
-		tb.sendMessage(chatID, "❌ Failed to pause bot")
-		return
-	}
-
+	_ = tb.storage.UpdateBotState(userID, true, false, false)
 	tb.sendMessage(chatID, "⏸️ Trading paused")
-	logger.Info("Trading paused for user %d", userID)
 }
 
 func (tb *TelegramBot) handleResume(chatID int64, userID int64) {
-	if err := tb.storage.UpdateBotState(userID, false, false, false); err != nil {
-		tb.sendMessage(chatID, "❌ Failed to resume bot")
-		return
-	}
-
+	_ = tb.storage.UpdateBotState(userID, false, false, false)
 	tb.sendMessage(chatID, "▶️ Trading resumed")
-	logger.Info("Trading resumed for user %d", userID)
 }
 
-func (tb *TelegramBot) handleRisk(chatID int64, userID int64, args []string) {
+func (tb *TelegramBot) handleRisk(chatID int64, userID int64, _ []string) {
 	settings, err := tb.storage.GetRiskSettings(userID)
 	if err != nil {
 		tb.sendMessage(chatID, "❌ Error fetching risk settings")
 		return
 	}
-
-	msg := fmt.Sprintf(`*Risk Settings*
-Max Risk Per Trade: %.2f%%
-Max Daily Loss: %.2f%%
-Max Open Trades: %d
-Max Trades/Day: %d
-Risk-Reward Ratio: %.2f`,
-		settings.MaxRiskPerTrade*100,
-		settings.MaxDailyLoss*100,
-		settings.MaxOpenTrades,
-		settings.MaxTradesPerDay,
-		settings.RiskRewardRatio)
-
-	tb.sendMessage(chatID, msg)
+	tb.sendMessage(chatID, fmt.Sprintf(`*Risk Settings*
+Max risk/trade: %.2f%%
+Max daily loss: %.2f%%
+Max open trades: %d`,
+		settings.MaxRiskPerTrade*100, settings.MaxDailyLoss*100, settings.MaxOpenTrades))
 }
 
 func (tb *TelegramBot) handleDailyReport(chatID int64, userID int64) {
@@ -342,93 +423,40 @@ func (tb *TelegramBot) handleDailyReport(chatID int64, userID int64) {
 		tb.sendMessage(chatID, "❌ Error fetching daily stats")
 		return
 	}
-
-	msg := fmt.Sprintf(`*Daily Report - %s*
-Trades: %d (W: %d | L: %d)
-Win Rate: %.2f%%
-Net Profit: $%.2f
-Max Drawdown: %.2f%%`,
-		time.Now().Format("2006-01-02"),
-		stats.TradeCount,
-		stats.WinCount,
-		stats.LossCount,
-		stats.WinRate,
-		stats.NetProfit,
-		stats.MaxDrawdown)
-
-	tb.sendMessage(chatID, msg)
+	tb.sendMessage(chatID, fmt.Sprintf(`*Daily Report*
+Trades: %d | Net: $%.2f`, stats.TradeCount, stats.NetProfit))
 }
 
 func (tb *TelegramBot) handleAutoStart(chatID int64, userID int64) {
-	botState, err := tb.storage.GetBotState(userID)
-	if err != nil {
-		tb.sendMessage(chatID, "❌ Error fetching bot state")
+	if !tb.requireTrading(chatID, userID) {
 		return
 	}
-
+	botState, _ := tb.storage.GetBotState(userID)
 	if botState.AutoTradingActive {
-		tb.sendMessage(chatID, "⚠️ Automated trading is already active")
+		tb.sendMessage(chatID, "⚠️ Already active")
 		return
 	}
-
-	if botState.DailyLossHit {
-		tb.sendMessage(chatID, "❌ Cannot start: daily loss limit was hit. /resume to reset.")
-		return
-	}
-
-	if err := tb.storage.UpdateBotState(userID, false, true, false); err != nil {
-		tb.sendMessage(chatID, "❌ Failed to enable automation")
-		return
-	}
-
-	tb.sendMessage(chatID, "🤖 *Automated trading started*\n\nThe bot will now automatically:\n• Generate trading signals\n• Open trades when conditions align\n• Close positions at TP/SL\n• Respect risk management rules\n\nYou can still use /pause to pause manually.")
-	logger.Info("Automated trading started for user %d", userID)
+	_ = tb.storage.UpdateBotState(userID, false, true, false)
+	tb.sendMessage(chatID, "🤖 Automated trading enabled. Connect Mock broker on the website if you have not yet.")
 }
 
 func (tb *TelegramBot) handleAutoStop(chatID int64, userID int64) {
-	if err := tb.storage.UpdateBotState(userID, false, false, false); err != nil {
-		tb.sendMessage(chatID, "❌ Failed to disable automation")
-		return
-	}
-
-	tb.sendMessage(chatID, "⏹️ *Automated trading stopped*\n\nManual /open and /close commands still work.")
-	logger.Info("Automated trading stopped for user %d", userID)
+	_ = tb.storage.UpdateBotState(userID, false, false, false)
+	tb.sendMessage(chatID, "⏹️ Automated trading stopped")
 }
 
 func (tb *TelegramBot) handleAutoStatus(chatID int64, userID int64) {
-	botState, err := tb.storage.GetBotState(userID)
-	if err != nil {
-		tb.sendMessage(chatID, "❌ Error fetching bot state")
-		return
-	}
-
-	autoStatus := "❌ Disabled"
+	botState, _ := tb.storage.GetBotState(userID)
+	auto := "❌ Off"
 	if botState.AutoTradingActive {
-		autoStatus = "✅ Enabled"
+		auto = "✅ On"
 	}
-
-	pauseStatus := "✅ Trading Active"
-	if botState.IsPaused {
-		pauseStatus = "⏸️ Trading Paused"
-	}
-
-	msg := fmt.Sprintf(`*Automation Status*
-Automated Trading: %s
-Trading Status: %s
-Daily Loss Hit: %v
-Last Active: %s`,
-		autoStatus,
-		pauseStatus,
-		botState.DailyLossHit,
-		botState.LastActiveAt.Format("2006-01-02 15:04:05"))
-
-	tb.sendMessage(chatID, msg)
+	tb.sendMessage(chatID, fmt.Sprintf("*Automation:* %s", auto))
 }
 
 func (tb *TelegramBot) sendMessage(chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "Markdown"
-
 	if _, err := tb.api.Send(msg); err != nil {
 		logger.Error("Failed to send message: %v", err)
 	}

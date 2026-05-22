@@ -11,8 +11,22 @@ import (
 	"forex-bot/internal/utils"
 )
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"app":                    "Market Mamba",
+		"public_mode":            s.cfg.App.PublicMode,
+		"subscription_required":  s.cfg.App.SubscriptionRequired,
+		"subscription_message":   s.cfg.App.SubscriptionContactMessage,
+		"free_trial_days":        s.cfg.App.FreeTrialDays,
+	})
 }
 
 func (s *Server) handleBrokerTypes(w http.ResponseWriter, r *http.Request) {
@@ -20,24 +34,12 @@ func (s *Server) handleBrokerTypes(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"brokers": broker.SupportedBrokerTypes(),
-	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": broker.SupportedBrokerTypes()})
 }
 
-func (s *Server) handleBrokerConnection(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.getBrokerConnection(w, r)
-	case http.MethodPost:
-		s.saveBrokerConnection(w, r)
-	default:
-		methodNotAllowed(w)
-	}
-}
-
-func (s *Server) getBrokerConnection(w http.ResponseWriter, _ *http.Request) {
-	conn, err := s.storage.GetActiveBrokerConnection(s.userID)
+func (s *Server) getBrokerConnection(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r)
+	conn, err := s.storage.GetActiveBrokerConnection(uid)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -48,9 +50,8 @@ func (s *Server) getBrokerConnection(w http.ResponseWriter, _ *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"connection": map[string]interface{}{
-			"provider":  conn.Provider,
-			"label":     conn.Label,
-			"is_active": conn.IsActive,
+			"provider":   conn.Provider,
+			"label":      conn.Label,
 			"updated_at": conn.UpdatedAt,
 		},
 	})
@@ -63,17 +64,14 @@ type saveBrokerRequest struct {
 }
 
 func (s *Server) saveBrokerConnection(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r)
 	var req saveBrokerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if req.Provider == "" {
-		writeError(w, http.StatusBadRequest, "provider is required")
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 	if !broker.IsLiveProvider(req.Provider) {
-		writeError(w, http.StatusBadRequest, "this broker is not available yet; choose Mock (Demo) for now")
+		writeError(w, http.StatusBadRequest, "broker not available yet — use mock")
 		return
 	}
 	if _, err := broker.NewFromProvider(req.Provider, req.Credentials); err != nil {
@@ -87,21 +85,25 @@ func (s *Server) saveBrokerConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	conn := &models.BrokerConnection{
-		ID:             utils.GenerateID("broker"),
-		UserID:         s.userID,
-		Provider:       req.Provider,
-		Label:          req.Label,
-		CredentialsEnc: enc,
-		IsActive:       true,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID: utils.GenerateID("broker"), UserID: uid, Provider: req.Provider,
+		Label: req.Label, CredentialsEnc: enc, IsActive: true, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.storage.UpsertBrokerConnection(conn); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.broker, _ = broker.NewFromProvider(req.Provider, req.Credentials)
-	writeJSON(w, http.StatusOK, map[string]string{"message": "broker connection saved", "provider": req.Provider})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "saved", "provider": req.Provider})
+}
+
+func (s *Server) handleBrokerConnection(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.getBrokerConnection(w, r)
+	case http.MethodPost:
+		s.saveBrokerConnection(w, r)
+	default:
+		methodNotAllowed(w)
+	}
 }
 
 func (s *Server) handleBrokerTest(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +113,7 @@ func (s *Server) handleBrokerTest(w http.ResponseWriter, r *http.Request) {
 	}
 	var req saveBrokerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 	b, err := broker.NewFromProvider(req.Provider, req.Credentials)
@@ -124,10 +126,7 @@ func (s *Server) handleBrokerTest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":      true,
-		"balance": bal,
-	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "balance": bal})
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -135,16 +134,17 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	state, _ := s.storage.GetBotState(s.userID)
-	conn, _ := s.storage.GetActiveBrokerConnection(s.userID)
+	uid := userIDFrom(r)
+	state, _ := s.storage.GetBotState(uid)
+	conn, _ := s.storage.GetActiveBrokerConnection(uid)
 	provider := s.cfg.Broker.Provider
 	if conn != nil {
 		provider = conn.Provider
 	}
+	canTrade, tradeMsg := s.subs.CanTrade(uid)
 	resp := map[string]interface{}{
-		"app":      "Market Mamba",
-		"env":      s.cfg.App.Environment,
-		"provider": provider,
+		"app": "Market Mamba", "env": s.cfg.App.Environment, "provider": provider,
+		"can_trade": canTrade, "trade_message": tradeMsg,
 	}
 	if state != nil {
 		resp["is_paused"] = state.IsPaused
@@ -158,16 +158,19 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	bal, err := s.broker.GetBalance()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	uid := userIDFrom(r)
+	if ok, msg := s.subs.CanTrade(uid); !ok {
+		writeError(w, http.StatusForbidden, msg)
 		return
 	}
-	eq, _ := s.broker.GetEquity()
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"balance": bal,
-		"equity":  eq,
-	})
+	b, err := s.resolveBroker(uid)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "connect a broker first")
+		return
+	}
+	bal, _ := b.GetBalance()
+	eq, _ := b.GetEquity()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"balance": bal, "equity": eq})
 }
 
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
@@ -175,15 +178,80 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	positions, err := s.broker.GetOpenPositions()
+	uid := userIDFrom(r)
+	b, err := s.resolveBroker(uid)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeJSON(w, http.StatusOK, map[string]interface{}{"positions": []interface{}{}})
 		return
 	}
+	positions, _ := b.GetOpenPositions()
 	if positions == nil {
 		positions = []*models.Position{}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"positions": positions})
+}
+
+func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	uid := userIDFrom(r)
+	sub, _ := s.subs.GetForUser(uid)
+	canTrade, msg := s.subs.CanTrade(uid)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"subscription": sub, "can_trade": canTrade, "message": msg,
+	})
+}
+
+func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	stats, err := s.storage.GetUserStats()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	users, err := s.storage.ListRecentUsers(50)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"users": users})
+}
+
+func (s *Server) handleAdminActivate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	adminID := userIDFrom(r)
+	var req struct {
+		TelegramID int64  `json:"telegram_id"`
+		Days       int    `json:"days"`
+		Plan       string `json:"plan"`
+		Notes      string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	sub, err := s.subs.ActivateManual(req.TelegramID, req.Days, req.Plan, req.Notes, adminID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"subscription": sub})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {

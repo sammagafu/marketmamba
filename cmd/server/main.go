@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"forex-bot/internal/api"
 	"forex-bot/internal/broker"
@@ -18,86 +17,61 @@ import (
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/storage"
+	"forex-bot/internal/subscription"
 	"forex-bot/internal/telegram"
 	"forex-bot/internal/trading"
-	"forex-bot/internal/utils"
+	"forex-bot/internal/users"
 )
 
 func main() {
-	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	logger.Info("Starting Market Mamba")
-	logger.Info("Environment: %s", cfg.App.Environment)
+	logger.Info("Environment: %s | public=%v | subscription_required=%v",
+		cfg.App.Environment, cfg.App.PublicMode, cfg.App.SubscriptionRequired)
 
-	// Initialize storage
 	db, err := storage.NewPostgresStorage(cfg.Database.URL)
 	if err != nil {
-		logger.Error("Failed to connect to database: %v", err)
 		log.Fatalf("Database connection failed: %v", err)
 	}
 	defer db.Close()
-
 	if err := db.Health(); err != nil {
-		logger.Error("Database health check failed: %v", err)
 		log.Fatalf("Database health check failed: %v", err)
 	}
-
 	logger.Info("Database connected successfully")
 
-	primaryUserID := int64(0)
-	if len(cfg.Telegram.AllowedUserIDs) > 0 {
-		primaryUserID = cfg.Telegram.AllowedUserIDs[0]
+	resolveBroker := func(userID int64) (broker.Broker, error) {
+		b, _, err := broker.ResolveBroker(db, userID, cfg.App.BrokerEncryptionKey, cfg.Broker.Provider)
+		return b, err
 	}
 
-	b, providerName, err := broker.ResolveBroker(db, primaryUserID, cfg.App.BrokerEncryptionKey, cfg.Broker.Provider)
+	subs := subscription.NewService(db, cfg)
+	usersSvc := users.NewService(db, subs)
+
+	validator := risk.NewRiskValidator(&models.RiskSettings{
+		MaxRiskPerTrade: cfg.Risk.MaxRiskPerTrade,
+		MaxDailyLoss:    cfg.Risk.MaxDailyLoss,
+		MaxOpenTrades:   cfg.Risk.MaxOpenTrades,
+		MaxTradesPerDay: cfg.Risk.MaxTradesPerDay,
+		RiskRewardRatio: cfg.Risk.RiskRewardRatio,
+	})
+
+	tgBot, err := telegram.NewTelegramBot(cfg, resolveBroker, db, validator, usersSvc, subs)
 	if err != nil {
-		logger.Error("Failed to resolve broker: %v", err)
-		log.Fatalf("Broker resolution failed: %v", err)
-	}
-	logger.Info("Using broker provider: %s", providerName)
-
-	// Initialize risk validator with default settings
-	riskSettings := &models.RiskSettings{
-		MaxRiskPerTrade:  cfg.Risk.MaxRiskPerTrade,
-		MaxDailyLoss:     cfg.Risk.MaxDailyLoss,
-		MaxOpenTrades:    cfg.Risk.MaxOpenTrades,
-		MaxTradesPerDay:  cfg.Risk.MaxTradesPerDay,
-		RiskRewardRatio:  cfg.Risk.RiskRewardRatio,
-	}
-	validator := risk.NewRiskValidator(riskSettings)
-
-	// Initialize Telegram bot
-	tgBot, err := telegram.NewTelegramBot(cfg.Telegram.BotToken, cfg.Telegram.AllowedUserIDs, b, db, validator)
-	if err != nil {
-		logger.Error("Failed to initialize Telegram bot: %v", err)
 		log.Fatalf("Telegram bot initialization failed: %v", err)
 	}
 
-	// Initialize bot state for allowed users
-	for _, userID := range cfg.Telegram.AllowedUserIDs {
-		initializeBotState(db, userID)
-	}
-
-	logger.Info("Bot initialized successfully")
-	logger.Info("Allowed users: %v", cfg.Telegram.AllowedUserIDs)
-
-	// Demo: Log some test data
-	logDemoInfo()
-
-	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Setup signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker)
+	coordinator.Start(ctx)
 
-	if cfg.App.EnableWeb && primaryUserID > 0 {
-		apiServer := api.NewServer(cfg, db, b, primaryUserID)
+	if cfg.App.EnableWeb {
+		apiServer := api.NewServer(cfg, db, subs, resolveBroker)
 		go func() {
 			addr := ":" + cfg.App.HTTPPort
 			logger.Info("Web dashboard listening on %s", addr)
@@ -107,91 +81,31 @@ func main() {
 		}()
 	}
 
-	// Initialize trading services for the first allowed user (for testing)
-	if primaryUserID > 0 {
+	logStartupBanner(cfg)
 
-		// Create trading executor
-		executor := trading.NewTradeExecutor(b, db, validator, primaryUserID)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-		// Create position monitor
-		posMonitor := trading.NewPositionMonitor(b, db, primaryUserID, 5*time.Second)
-		posMonitor.Start(ctx, executor)
-		logger.Info("Position monitor started for user %d", primaryUserID)
-
-		// Create signal generator and monitor
-		sigGen := trading.NewSignalGenerator("EURUSD", 0.7, cfg.Risk.RiskRewardRatio)
-		sigMonitor := trading.NewSignalMonitor(sigGen, executor, db, primaryUserID, 10*time.Second)
-		sigMonitor.Start(ctx)
-		logger.Info("Signal monitor started for user %d", primaryUserID)
-
-		// Run Telegram bot in goroutine
-		go func() {
-			if err := tgBot.Start(); err != nil {
-				logger.Error("Bot error: %v", err)
-			}
-		}()
-
-		// Wait for shutdown signal
-		<-sigChan
-		logger.Info("Shutdown signal received")
-
-		// Graceful shutdown
-		cancel()
-		posMonitor.Stop()
-		sigMonitor.Stop()
-
-		logger.Info("Shutdown complete")
-	} else {
-		// Start bot if no users configured
+	go func() {
 		if err := tgBot.Start(); err != nil {
 			logger.Error("Bot error: %v", err)
-			log.Fatalf("Bot error: %v", err)
 		}
-	}
+	}()
+
+	<-sigChan
+	logger.Info("Shutdown signal received")
+	cancel()
+	coordinator.StopAll()
+	logger.Info("Shutdown complete")
 }
 
-func initializeBotState(db storage.Storage, userID int64) {
-	// Check if bot state exists
-	_, err := db.GetBotState(userID)
-	if err == nil {
-		return // Already exists
-	}
-
-	// Create new bot state
-	state := &models.BotState{
-		ID:                utils.GenerateID("state"),
-		UserID:            userID,
-		IsPaused:          false,
-		AutoTradingActive: false,
-		DailyLossHit:      false,
-		LastActiveAt:      time.Now(),
-		UpdatedAt:         time.Now(),
-	}
-
-	if err := db.CreateBotState(state); err != nil {
-		logger.Error("Failed to create bot state for user %d: %v", userID, err)
-	}
-}
-
-func logDemoInfo() {
-	separator := strings.Repeat("=", 60)
-	fmt.Println("\n" + separator)
-	fmt.Println("Market Mamba - Development Mode")
-	fmt.Println(separator)
-	fmt.Println("\nAvailable Commands:")
-	fmt.Println("  /start        - Show help")
-	fmt.Println("  /status       - Bot status")
-	fmt.Println("  /balance      - Account balance")
-	fmt.Println("  /positions    - Open positions")
-	fmt.Println("  /open         - Open trade")
-	fmt.Println("  /close        - Close position")
-	fmt.Println("  /closeall     - Close all positions")
-	fmt.Println("  /pause        - Pause trading")
-	fmt.Println("  /resume       - Resume trading")
-	fmt.Println("  /risk         - Risk settings")
-	fmt.Println("  /dailyreport  - Daily report")
-	fmt.Println("\nExample Trade:")
-	fmt.Println("  /open EURUSD BUY 1.0 1.0900 1.1000")
-	fmt.Println("\nWarning: This is a development bot. Use with caution in production.")
-	fmt.Println(separator + "\n")
+func logStartupBanner(cfg *config.Config) {
+	sep := strings.Repeat("=", 60)
+	fmt.Println("\n" + sep)
+	fmt.Println("Market Mamba")
+	fmt.Println(sep)
+	fmt.Printf("Public mode: %v\n", cfg.App.PublicMode)
+	fmt.Printf("Admins: %v\n", cfg.Telegram.AdminUserIDs)
+	fmt.Printf("Web: http://localhost:%s\n", cfg.App.HTTPPort)
+	fmt.Println(sep + "\n")
 }

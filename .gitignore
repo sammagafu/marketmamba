@@ -35,6 +35,8 @@ vendor/
 /forex-bot
 /bin/
 /dist/
+web/node_modules/
+# Keep internal/api/dist for go:embed (built via make web-build)
 
 # Logs
 *.log

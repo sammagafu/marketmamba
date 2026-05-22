@@ -29,7 +29,12 @@ install:
 	go mod download
 	go mod tidy
 
-build:
+web-build:
+	@echo "Building Vue frontend..."
+	cd web && npm install && npm run build
+	rm -rf internal/api/dist && cp -r web/dist internal/api/dist
+
+build: web-build
 	@echo "Building binary..."
 	go build -o forex-bot cmd/server/main.go
 

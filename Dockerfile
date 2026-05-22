@@ -1,34 +1,25 @@
-# Build stage
+# Vue frontend
+FROM node:20-alpine AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json* ./
+RUN npm install
+COPY web/ ./
+RUN npm run build
+
+# Go backend
 FROM golang:1.21-alpine AS builder
-
 WORKDIR /app
-
-# Install dependencies
 RUN apk add --no-cache git
-
-# Copy go mod files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
-
-# Copy source code
 COPY . .
-
-# Build application
+COPY --from=web /web/dist ./internal/api/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
 
-# Final stage
 FROM alpine:latest
-
 RUN apk --no-cache add ca-certificates postgresql-client
-
 WORKDIR /root/
-
-# Copy binary from builder
 COPY --from=builder /app/server .
-
-# Copy migrations
 COPY migrations/ ./migrations/
-
+EXPOSE 8090
 CMD ["./server"]

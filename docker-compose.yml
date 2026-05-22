@@ -38,6 +38,11 @@ services:
       WEB_API_KEY: ${WEB_API_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://marketmamba.kkooapp.co.tz}
       BROKER_ENCRYPTION_KEY: ${BROKER_ENCRYPTION_KEY}
+      PUBLIC_MODE: ${PUBLIC_MODE:-true}
+      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED:-false}
+      FREE_TRIAL_DAYS: ${FREE_TRIAL_DAYS:-30}
+      TELEGRAM_ADMIN_USER_IDS: ${TELEGRAM_ADMIN_USER_IDS}
+      SUBSCRIPTION_CONTACT: ${SUBSCRIPTION_CONTACT:-Free testing — no payment yet.}
     ports:
       - "127.0.0.1:8090:8090"
     depends_on:
