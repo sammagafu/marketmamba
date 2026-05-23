@@ -1,0 +1,421 @@
+<script setup>
+import { computed, ref } from 'vue'
+
+const props = defineProps({
+  status: { type: Object, default: null },
+  account: { type: Object, default: null },
+  subscription: { type: Object, default: null },
+  config: { type: Object, default: null },
+  positions: { type: Array, default: () => [] },
+  trades: { type: Array, default: () => [] },
+  telegramId: { type: [String, Number], default: '' },
+  canTrade: { type: Boolean, default: true },
+})
+
+defineEmits(['refresh'])
+
+const tradeFilter = ref('all')
+
+const openTrades = computed(() => props.trades.filter((t) => t.status === 'OPEN'))
+const closedTrades = computed(() => props.trades.filter((t) => t.status === 'CLOSED'))
+
+const filteredTrades = computed(() => {
+  if (tradeFilter.value === 'open') return openTrades.value
+  if (tradeFilter.value === 'closed') return closedTrades.value
+  return props.trades
+})
+
+const netClosedPL = computed(() =>
+  closedTrades.value.reduce((sum, t) => sum + (Number(t.profit) || 0), 0),
+)
+
+const subscriptionLabel = computed(() => {
+  const sub = props.subscription?.subscription
+  if (!sub) {
+    const days = props.config?.free_trial_days ?? props.config?.trial_days ?? 5
+    return `Free trial · ${days} days`
+  }
+  return `${sub.plan} · ${sub.status}`
+})
+
+const subscriptionExpires = computed(() => {
+  const exp = props.subscription?.subscription?.expires_at
+  return exp ? new Date(exp).toLocaleDateString() : '—'
+})
+
+const miniAppUrl = computed(() => props.config?.mini_app_url || props.config?.public_site_url || '')
+
+function fmtProfit(t) {
+  if (t.profit == null) return '—'
+  const n = Number(t.profit)
+  return `${n >= 0 ? '+' : ''}$${n.toFixed(2)}`
+}
+
+function fmtTime(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString()
+}
+</script>
+
+<template>
+  <section class="user-dashboard wide">
+    <div class="dash-head">
+      <div class="dash-title">
+        <h2>Your dashboard</h2>
+        <p class="muted">Only your trades and positions — not shared with other clients</p>
+      </div>
+      <div class="dash-head-actions">
+        <span v-if="telegramId" class="id-pill">ID <code>{{ telegramId }}</code></span>
+        <button type="button" class="btn-secondary" @click="$emit('refresh')">Refresh</button>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-label">Subscription</span>
+        <strong class="stat-value">{{ subscriptionLabel }}</strong>
+        <span class="stat-sub muted">Expires {{ subscriptionExpires }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Balance</span>
+        <strong class="stat-value">${{ account?.balance != null ? Number(account.balance).toFixed(2) : '—' }}</strong>
+        <span class="stat-sub muted">Equity ${{ account?.equity != null ? Number(account.equity).toFixed(2) : '—' }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Open positions</span>
+        <strong class="stat-value">{{ positions.length }}</strong>
+        <span class="stat-sub muted">{{ openTrades.length }} open in log</span>
+      </div>
+      <div class="stat-card" :class="{ profit: netClosedPL >= 0, loss: netClosedPL < 0 }">
+        <span class="stat-label">Your closed P/L</span>
+        <strong class="stat-value">{{ netClosedPL >= 0 ? '+' : '' }}${{ netClosedPL.toFixed(2) }}</strong>
+        <span class="stat-sub muted">{{ closedTrades.length }} closed trades</span>
+      </div>
+    </div>
+
+    <div class="status-row">
+      <div class="status-chip-row">
+        <span class="pill" :class="status?.can_trade ? 'ok' : 'warn'">
+          {{ status?.can_trade ? 'Can trade' : 'Trading locked' }}
+        </span>
+        <span class="pill" :class="status?.auto_trading ? 'ok' : ''">
+          Auto {{ status?.auto_trading ? 'ON' : 'OFF' }}
+        </span>
+        <span class="pill muted-pill">Broker: {{ status?.provider || '—' }}</span>
+      </div>
+      <p v-if="status?.trade_message && !canTrade" class="warn-text">{{ status.trade_message }}</p>
+      <p v-else-if="subscription?.message" class="muted">{{ subscription.message }}</p>
+    </div>
+
+    <div v-if="miniAppUrl" class="mini-cta card-inline">
+      <div>
+        <strong>📱 Telegram Mini App</strong>
+        <p class="muted">
+          {{ config?.subscription_price_usdt ?? 10 }} USDT/month after
+          {{ config?.free_trial_days ?? config?.trial_days ?? 5 }}-day trial — pay via Binance in bot menu
+          <strong>📊 Dashboard</strong>
+        </p>
+      </div>
+      <a
+        class="btn-primary mini-link"
+        :href="`https://t.me/${config?.telegram_bot_username || 'market_mamba_bot'}`"
+        target="_blank"
+        rel="noopener"
+      >Open @{{ config?.telegram_bot_username || 'market_mamba_bot' }}</a>
+    </div>
+
+    <section class="card card-bull dash-section">
+      <h3>Your open positions</h3>
+      <div class="table-wrap">
+        <table v-if="positions.length">
+          <thead>
+            <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>P/L</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in positions" :key="p.id || p.symbol + p.type">
+              <td><strong>{{ p.symbol }}</strong></td>
+              <td :class="p.type === 'BUY' ? 'buy' : 'sell'">{{ p.type }}</td>
+              <td>{{ p.quantity }}</td>
+              <td>{{ Number(p.entry_price || 0).toFixed(5) }}</td>
+              <td :class="{ profit: p.profit > 0, loss: p.profit < 0 }">
+                {{ p.profit != null ? '$' + Number(p.profit).toFixed(2) : '—' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="muted empty-hint">No open positions on your account.</p>
+      </div>
+    </section>
+
+    <section class="card trade-log-card dash-section">
+      <div class="trade-log-head">
+        <h3>Your trade log</h3>
+        <div class="filter-tabs">
+          <button type="button" :class="{ active: tradeFilter === 'all' }" @click="tradeFilter = 'all'">
+            All ({{ trades.length }})
+          </button>
+          <button type="button" :class="{ active: tradeFilter === 'open' }" @click="tradeFilter = 'open'">
+            Open ({{ openTrades.length }})
+          </button>
+          <button type="button" :class="{ active: tradeFilter === 'closed' }" @click="tradeFilter = 'closed'">
+            Closed ({{ closedTrades.length }})
+          </button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table v-if="filteredTrades.length">
+          <thead>
+            <tr>
+              <th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Status</th><th>P/L</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in filteredTrades" :key="t.id">
+              <td>{{ fmtTime(t.created_at) }}</td>
+              <td><strong>{{ t.symbol }}</strong></td>
+              <td :class="t.type === 'BUY' ? 'buy' : 'sell'">{{ t.type }}</td>
+              <td>{{ t.quantity }}</td>
+              <td>{{ Number(t.entry_price).toFixed(5) }}</td>
+              <td>
+                <span class="status-chip" :class="t.status?.toLowerCase()">{{ t.status }}</span>
+                <span v-if="t.closure_reason" class="muted small"> {{ t.closure_reason }}</span>
+              </td>
+              <td :class="{ profit: t.profit > 0, loss: t.profit < 0 }">{{ fmtProfit(t) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="muted empty-hint">
+          No trades in this view yet.<br />
+          Telegram: connect broker → <code>/open</code> or <code>/autostart</code>
+        </p>
+      </div>
+    </section>
+  </section>
+</template>
+
+<style scoped>
+.user-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  grid-column: 1 / -1;
+}
+
+.dash-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.dash-title h2 {
+  margin: 0 0 0.25rem;
+  font-size: clamp(1.1rem, 4vw, 1.35rem);
+}
+
+.dash-title p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.dash-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.id-pill {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  background: var(--chart-bg);
+  border: 1px solid var(--border);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
+  gap: 0.65rem;
+}
+
+.stat-card {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.stat-sub {
+  font-size: 0.75rem;
+}
+
+.stat-card.profit .stat-value { color: var(--brand); }
+.stat-card.loss .stat-value { color: var(--loss-text); }
+
+.status-row {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.status-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--down-dim);
+  color: var(--muted);
+}
+
+.pill.ok {
+  background: var(--brand-muted);
+  color: var(--brand);
+}
+
+.pill.warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn-border);
+}
+
+.pill.muted-pill {
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.warn-text {
+  margin: 0.5rem 0 0;
+  color: var(--warn);
+  font-size: 0.9rem;
+}
+
+.mini-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-radius: 12px;
+  background: var(--brand-muted);
+  border: 1px solid var(--border-strong);
+}
+
+.mini-cta p {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.mini-link {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.card-inline {
+  margin: 0;
+}
+
+.dash-section {
+  margin: 0;
+}
+
+.dash-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.trade-log-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.trade-log-head h3 {
+  margin: 0;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.filter-tabs button {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--chart-bg);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.filter-tabs button.active {
+  background: var(--brand-muted);
+  color: var(--brand);
+  border-color: var(--brand-dim);
+}
+
+.trade-log-card::before {
+  content: '';
+  display: block;
+  height: 3px;
+  margin: -1rem -1rem 1rem;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(90deg, var(--brand), var(--brand-deep));
+}
+
+.buy { color: var(--brand); font-weight: 600; }
+.sell { color: var(--down); font-weight: 600; }
+.profit { color: var(--brand); font-weight: 600; }
+.loss { color: var(--loss-text); font-weight: 600; }
+
+.status-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--down-dim);
+}
+
+.status-chip.open { background: var(--brand-muted); color: var(--brand); }
+.status-chip.closed { background: var(--down-dim); color: var(--muted); }
+
+.empty-hint {
+  padding: 1.5rem;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.small { font-size: 0.75rem; }
+</style>

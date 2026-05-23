@@ -7,6 +7,7 @@ import TelegramLogin from './components/TelegramLogin.vue'
 import EmailAdminLogin from './components/EmailAdminLogin.vue'
 import LandingHero from './components/LandingHero.vue'
 import AdminPanel from './components/AdminPanel.vue'
+import UserDashboard from './components/UserDashboard.vue'
 import BrandLogo from './components/BrandLogo.vue'
 import TradingPairs from './components/TradingPairs.vue'
 import AppFooter from './components/AppFooter.vue'
@@ -39,6 +40,7 @@ const permissions = ref([])
 const isBlocked = ref(false)
 const canTrade = ref(true)
 const tradeMessage = ref('')
+const telegramId = ref('')
 
 const selectedBroker = computed(() => brokers.value.find((b) => b.id === provider.value))
 const brokerIsLive = computed(() => selectedBroker.value?.status === 'live')
@@ -47,6 +49,7 @@ const botUsername = computed(() => config.value?.telegram_bot_username || 'marke
 function onLoggedIn(data) {
   loggedIn.value = true
   applyProfile({ role, isAdmin, permissions, isBlocked, canTrade, tradeMessage }, data)
+  telegramId.value = data.telegram_id || localStorage.getItem('mm_telegram_id') || ''
   userName.value =
     [data.user?.first_name, data.user?.last_name].filter(Boolean).join(' ') ||
     data.email ||
@@ -91,12 +94,6 @@ function onProviderChange() {
   credentials.value = next
 }
 
-function fmtProfit(t) {
-  if (t.profit == null) return '—'
-  const n = Number(t.profit)
-  return `${n >= 0 ? '+' : ''}$${n.toFixed(2)}`
-}
-
 async function refresh() {
   if (!loggedIn.value) return
   message.value = ''
@@ -104,6 +101,7 @@ async function refresh() {
     config.value = await fetch(`${API}/config`).then((r) => r.json())
     const me = await api('/auth/me')
     applyProfile({ role, isAdmin, permissions, isBlocked, canTrade, tradeMessage }, me)
+    telegramId.value = me.telegram_id || ''
     userName.value = [me.user?.first_name, me.user?.last_name].filter(Boolean).join(' ')
     if (isBlocked.value) {
       message.value = 'Your account is blocked. Contact support.'
@@ -368,73 +366,22 @@ onMounted(async () => {
     />
 
     <template v-if="!isBlocked">
-    <section class="card card-bull">
-      <h2>Status</h2>
-      <template v-if="status">
-        <p>Broker: <strong>{{ status.provider }}</strong></p>
-        <p>Can trade: {{ status.can_trade ? 'yes' : 'no' }}</p>
-        <p v-if="status.trade_message" class="muted">{{ status.trade_message }}</p>
-        <p>Auto: {{ status.auto_trading ? 'on' : 'off' }}</p>
-      </template>
-    </section>
-
-    <section class="card card-bull">
-      <h2>Account</h2>
-      <template v-if="account">
-        <p>Balance: <strong>${{ account.balance?.toFixed(2) }}</strong></p>
-        <p>Equity: ${{ account.equity?.toFixed(2) }}</p>
-      </template>
-      <p v-else class="muted">Connect Mock broker below</p>
-    </section>
+    <UserDashboard
+      :status="status"
+      :account="account"
+      :subscription="subscription"
+      :config="config"
+      :positions="positions"
+      :trades="trades"
+      :telegram-id="telegramId"
+      :can-trade="canTrade"
+      @refresh="refresh"
+    />
 
     <TradingPairs
       :can-trade="canTrade && !isBlocked"
       @message="(m) => { message = m.text; messageOk = m.ok }"
     />
-
-    <section class="card card-win">
-      <h2>Subscription</h2>
-      <template v-if="subscription">
-        <p v-if="subscription.subscription">
-          Plan: {{ subscription.subscription.plan }} · {{ subscription.subscription.status }}
-        </p>
-        <p class="muted">{{ config?.subscription_message }}</p>
-      </template>
-    </section>
-
-    <section class="card wide trade-log-card">
-      <div class="trade-log-head">
-        <h2>📋 Your trade log</h2>
-        <button type="button" class="btn-secondary" @click="refresh">Refresh</button>
-      </div>
-      <div class="table-wrap">
-        <table v-if="trades.length">
-          <thead>
-            <tr>
-              <th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Status</th><th>P/L</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="t in trades" :key="t.id">
-              <td>{{ new Date(t.created_at).toLocaleString() }}</td>
-              <td><strong>{{ t.symbol }}</strong></td>
-              <td :class="t.type === 'BUY' ? 'buy' : 'sell'">{{ t.type }}</td>
-              <td>{{ t.quantity }}</td>
-              <td>{{ Number(t.entry_price).toFixed(5) }}</td>
-              <td>
-                <span class="status-chip" :class="t.status?.toLowerCase()">{{ t.status }}</span>
-                <span v-if="t.closure_reason" class="muted"> {{ t.closure_reason }}</span>
-              </td>
-              <td :class="{ profit: t.profit > 0, loss: t.profit < 0 }">{{ fmtProfit(t) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="muted empty-hint">
-          No trades logged for your account yet.<br />
-          Telegram: <code>/broker connect</code> then <code>/open EURUSD BUY 0.1 1.08 1.10</code> or <code>/autostart</code>
-        </p>
-      </div>
-    </section>
 
     <section class="card wide card-bull">
       <h2>Broker connection</h2>
@@ -474,22 +421,6 @@ onMounted(async () => {
         <button type="button" class="btn-secondary" :disabled="!brokerIsLive" @click="testBroker">Test</button>
         <button type="button" class="btn-primary" :disabled="!brokerIsLive" @click="saveBroker">Save</button>
       </div>
-    </section>
-
-    <section class="card wide">
-      <h2>Open positions</h2>
-      <table v-if="positions.length">
-        <thead><tr><th>Symbol</th><th>Type</th><th>Qty</th><th>P/L</th></tr></thead>
-        <tbody>
-          <tr v-for="p in positions" :key="p.id">
-            <td>{{ p.symbol }}</td>
-            <td>{{ p.type }}</td>
-            <td>{{ p.quantity }}</td>
-            <td>{{ p.profit?.toFixed(2) }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else class="muted">No open positions</p>
     </section>
     </template>
   </div>
