@@ -35,6 +35,12 @@ if ! git remote get-url origin &>/dev/null; then
   exit 1
 fi
 git pull origin main
+# Host nginx/apache blocks Caddy on 80/443 — stop before compose up
+if command -v sudo >/dev/null 2>&1; then
+  sudo bash scripts/free-web-ports.sh 2>/dev/null || bash scripts/free-web-ports.sh 2>/dev/null || true
+else
+  bash scripts/free-web-ports.sh 2>/dev/null || true
+fi
 docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/006_auto_trade_approval.sql 2>/dev/null || true
 docker compose -p marketmamba exec -T postgres psql -U forexbot -d forexbot < migrations/007_binance_payment_orders.sql 2>/dev/null || true
 docker compose -p marketmamba up -d --build
