@@ -41,16 +41,26 @@ function loginOrigin() {
 }
 
 function oidcInitOptions() {
+  const origin = loginOrigin()
   return {
     client_id: Number(props.clientId),
     request_access: ['write'],
-    origin: loginOrigin(),
+    origin,
+    redirect_uri: origin,
   }
 }
 
 async function handleOidc(data) {
   if (!data || data.error) {
-    emit('error', data?.error || 'Telegram sign-in cancelled')
+    const err = data?.error || 'Telegram sign-in cancelled'
+    if (String(err).toLowerCase().includes('origin')) {
+      emit(
+        'error',
+        `Telegram Web Login: add ${loginOrigin()} in @BotFather → Bot Settings → Web Login (Trusted Origins). Or remove TELEGRAM_BOT_CLIENT_ID on the server to use the classic widget.`,
+      )
+      return
+    }
+    emit('error', err)
     return
   }
   if (!data.id_token) {
