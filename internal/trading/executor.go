@@ -71,8 +71,8 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 		return nil, err
 	}
 
-	// Get open positions
-	openPositions, err := te.broker.GetOpenPositions()
+	// Get this user's open positions (not the whole broker account).
+	openPositions, err := te.storage.GetOpenPositionsByUser(te.userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get positions: %w", err)
 	}
@@ -149,15 +149,19 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 	return position, nil
 }
 
-// CheckAndClosePositions checks positions against TP/SL levels
+// CheckAndClosePositions checks this user's logged positions against TP/SL levels.
 func (te *TradeExecutor) CheckAndClosePositions() error {
-	positions, err := te.broker.GetOpenPositions()
+	positions, err := te.storage.GetOpenPositionsByUser(te.userID)
 	if err != nil {
-		logger.Error("Failed to get positions: %v", err)
+		logger.Error("Failed to get user positions: %v", err)
 		return err
 	}
 
 	for _, pos := range positions {
+		if live, err := te.broker.GetPositionByID(pos.ID); err == nil && live != nil {
+			pos.CurrentPrice = live.CurrentPrice
+			pos.Profit = live.Profit
+		}
 		// Check take profit
 		if shouldCloseTakeProfit(pos) {
 			if err := te.closePosition(pos, "TP"); err != nil {

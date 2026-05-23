@@ -180,7 +180,7 @@ onMounted(async () => {
       </section>
 
       <section class="card">
-        <h2>Open positions ({{ positions.length }})</h2>
+        <h2>Your open positions ({{ positions.length }})</h2>
         <p v-if="!positions.length" class="muted">No open positions</p>
         <ul v-else class="activity-list">
           <li v-for="p in positions" :key="p.id || p.symbol + p.type">
@@ -191,7 +191,7 @@ onMounted(async () => {
       </section>
 
       <section class="card">
-        <h2>All trades ({{ trades.length }})</h2>
+        <h2>Your trades ({{ trades.length }})</h2>
         <p v-if="!trades.length" class="muted">No trades yet</p>
         <ul v-else class="activity-list trades-scroll">
           <li v-for="t in trades" :key="t.id">

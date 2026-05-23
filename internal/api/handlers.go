@@ -7,6 +7,7 @@ import (
 	"forex-bot/internal/accounts"
 	"forex-bot/internal/broker"
 	"forex-bot/internal/models"
+	"forex-bot/internal/positions"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -224,11 +225,15 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"positions": []interface{}{}})
 		return
 	}
-	positions, _ := b.GetOpenPositions()
-	if positions == nil {
-		positions = []*models.Position{}
+	userPos, err := positions.ListOpenForUser(s.storage, uid, b)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"positions": positions})
+	if userPos == nil {
+		userPos = []*models.Position{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"positions": userPos})
 }
 
 func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {

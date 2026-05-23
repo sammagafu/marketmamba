@@ -67,19 +67,20 @@ func (pm *PositionMonitor) Stop() {
 }
 
 func (pm *PositionMonitor) checkPositions(executor *TradeExecutor) error {
-	// Get open positions from broker
-	positions, err := pm.broker.GetOpenPositions()
+	userPos, err := pm.storage.GetOpenPositionsByUser(pm.userID)
 	if err != nil {
-		return fmt.Errorf("failed to get positions: %w", err)
+		return fmt.Errorf("failed to get user positions: %w", err)
 	}
-
-	if len(positions) == 0 {
+	if len(userPos) == 0 {
 		return nil
 	}
 
-	// Check each position
-	for _, pos := range positions {
-		// Simulate price movement (in real system, get actual market price)
+	for _, pos := range userPos {
+		if live, err := pm.broker.GetPositionByID(pos.ID); err == nil && live != nil {
+			pos.CurrentPrice = live.CurrentPrice
+			pos.Profit = live.Profit
+			pos.ProfitPct = live.ProfitPct
+		}
 		if err := pm.checkPosition(pos, executor); err != nil {
 			logger.Error("Error checking position %s: %v", pos.ID, err)
 		}

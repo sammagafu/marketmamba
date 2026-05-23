@@ -142,7 +142,11 @@ func (ps *PostgresStorage) GetPositionByID(positionID string) (*models.Position,
 }
 
 func (ps *PostgresStorage) GetOpenPositionsByUser(userID int64) ([]*models.Position, error) {
-	query := `SELECT id, trade_id, broker_id, user_id, symbol, type, quantity, entry_price, current_price, stop_loss, take_profit, profit, profit_pct, updated_at FROM positions WHERE user_id = $1`
+	query := `SELECT p.id, p.trade_id, p.broker_id, p.user_id, p.symbol, p.type, p.quantity, p.entry_price, p.current_price, p.stop_loss, p.take_profit, p.profit, p.profit_pct, p.updated_at
+		 FROM positions p
+		 INNER JOIN trades t ON t.id = p.trade_id AND t.status = 'OPEN'
+		 WHERE p.user_id = $1
+		 ORDER BY p.updated_at DESC`
 
 	rows, err := ps.db.Query(query, userID)
 	if err != nil {

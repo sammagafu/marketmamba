@@ -14,6 +14,7 @@ import (
 	"forex-bot/internal/feedback"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
+	"forex-bot/internal/positions"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
@@ -388,13 +389,18 @@ func (tb *TelegramBot) handlePositions(chatID int64, userID int64) {
 		tb.sendMessage(chatID, "❌ Broker not configured")
 		return
 	}
-	positions, err := b.GetOpenPositions()
-	if err != nil || len(positions) == 0 {
+	ps, ok := tb.storage.(*storage.PostgresStorage)
+	if !ok {
+		tb.sendMessage(chatID, "❌ Trade history unavailable")
+		return
+	}
+	userPos, err := positions.ListOpenForUser(ps, userID, b)
+	if err != nil || len(userPos) == 0 {
 		tb.sendMessage(chatID, "No open positions")
 		return
 	}
-	msg := "*Open Positions*\n\n"
-	for i, pos := range positions {
+	msg := "*Your open positions*\n\n"
+	for i, pos := range userPos {
 		msg += fmt.Sprintf("%d. %s %s\n   Entry: %.5f | P/L: %.2f\n", i+1, pos.Symbol, pos.Type, pos.EntryPrice, pos.Profit)
 	}
 	tb.sendMessage(chatID, msg)
@@ -478,9 +484,21 @@ func (tb *TelegramBot) handleCloseAll(chatID int64, userID int64) {
 		tb.sendMessage(chatID, "❌ Broker not configured")
 		return
 	}
-	positions, _ := b.GetOpenPositions()
-	_ = b.CloseAllPositions()
-	for _, pos := range positions {
+	ps, ok := tb.storage.(*storage.PostgresStorage)
+	if !ok {
+		tb.sendMessage(chatID, "❌ Trade history unavailable")
+		return
+	}
+	userPos, err := positions.ListOpenForUser(ps, userID, b)
+	if err != nil || len(userPos) == 0 {
+		tb.sendMessage(chatID, "No open positions")
+		return
+	}
+	for _, pos := range userPos {
+		if err := b.ClosePosition(pos.ID); err != nil {
+			logger.Error("close position %s user %d: %v", pos.ID, userID, err)
+			continue
+		}
 		exit := pos.CurrentPrice
 		if exit <= 0 {
 			exit = pos.EntryPrice
@@ -489,7 +507,7 @@ func (tb *TelegramBot) handleCloseAll(chatID int64, userID int64) {
 			logger.Error("logTradeClose %s: %v", pos.ID, err)
 		}
 	}
-	tb.sendMessage(chatID, "✅ All positions closed & logged")
+	tb.sendMessage(chatID, "✅ Your positions closed & logged")
 }
 
 func (tb *TelegramBot) handlePause(chatID int64, userID int64) {

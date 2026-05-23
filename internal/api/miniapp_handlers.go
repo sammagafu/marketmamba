@@ -7,6 +7,7 @@ import (
 
 	"forex-bot/internal/auth"
 	"forex-bot/internal/models"
+	"forex-bot/internal/positions"
 	"forex-bot/internal/telegramlogin"
 )
 
@@ -59,16 +60,18 @@ func (s *Server) handleMiniAppDashboard(w http.ResponseWriter, r *http.Request) 
 	today, _ := s.storage.GetDailyStats(uid, time.Now())
 	subStatus := s.subs.SubscriptionStatus(uid)
 
-	var positions interface{} = []interface{}{}
+	posList := []*models.Position{}
 	if b, err := s.resolveBroker(uid); err == nil {
-		if pos, err := b.GetOpenPositions(); err == nil && pos != nil {
-			positions = pos
+		if userPos, err := positions.ListOpenForUser(s.storage, uid, b); err == nil && userPos != nil {
+			posList = userPos
 		}
+	} else if userPos, err := positions.ListOpenForUser(s.storage, uid, nil); err == nil && userPos != nil {
+		posList = userPos
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"trades":       trades,
-		"positions":    positions,
+		"positions":    posList,
 		"payments":     orders,
 		"daily_stats":  today,
 		"subscription": subStatus,
