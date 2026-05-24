@@ -16,6 +16,7 @@ import (
 	"forex-bot/internal/config"
 	"forex-bot/internal/decision"
 	"forex-bot/internal/feedback"
+	"forex-bot/internal/filter"
 	"forex-bot/internal/marketdata"
 	"forex-bot/internal/logger"
 	"forex-bot/internal/models"
@@ -100,9 +101,11 @@ func main() {
 	outcomeSvc := feedback.NewService(tgBot, db, subs, cfg.SignalSymbols())
 	tgBot.SetOutcomeNotifier(outcomeSvc)
 
+	marketSvc := marketdata.NewService(cfg.App.MarketDataAPIKey)
+	filterSvc := filter.NewService(marketSvc, validator, cfg.App.SignalMinStrength, cfg.Risk.RiskRewardRatio)
+
 	var decisionEngine *decision.Engine
 	if cfg.App.DecisionEnabled {
-		marketSvc := marketdata.NewService(cfg.App.MarketDataAPIKey)
 		cooldown := decision.NewCooldownTracker(cfg.SniperCooldown())
 		decisionEngine = decision.NewEngine(
 			marketSvc,
@@ -149,7 +152,7 @@ func main() {
 	}
 
 	if cfg.App.EnableWeb {
-		apiServer := api.NewServer(cfg, db, subs, tierSvc, paySvc, usersSvc, resolveBroker, tgBot, validator, pairSvc)
+		apiServer := api.NewServer(cfg, db, subs, tierSvc, paySvc, usersSvc, resolveBroker, tgBot, validator, pairSvc, filterSvc)
 		go func() {
 			addr := ":" + cfg.App.HTTPPort
 			logger.Info("Web dashboard listening on %s", addr)

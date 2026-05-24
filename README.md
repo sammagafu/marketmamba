@@ -129,7 +129,9 @@ Admins: `/admin activate`, signal broadcast, user block — see [`Agent.md`](./A
 3. **Size & execute** — Risk-based lots on your connected broker  
 4. **Monitor & log** — TP/SL, per-user trade history  
 
-Details: [`docs/HOW_WE_TRADE.md`](./docs/HOW_WE_TRADE.md)
+Details: [`docs/HOW_WE_TRADE.md`](./docs/HOW_WE_TRADE.md) · Filter pipeline: [`docs/FILTER_FRAMEWORK.md`](./docs/FILTER_FRAMEWORK.md)
+
+**Inspect filters:** Dashboard → **Filter stack**, or `GET /api/v1/filters/report?symbol=EURUSD` (authenticated).
 
 ## Project layout
 

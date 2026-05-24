@@ -9,6 +9,7 @@ import (
 
 	"forex-bot/internal/broker"
 	"forex-bot/internal/config"
+	"forex-bot/internal/filter"
 	"forex-bot/internal/pairs"
 	"forex-bot/internal/payments"
 	"forex-bot/internal/risk"
@@ -35,10 +36,11 @@ type Server struct {
 	signalNotifier   signals.Notifier
 	riskValidator    *risk.RiskValidator
 	pairSvc          *pairs.Service
+	filters          *filter.Service
 	mux              *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, tierSvc *tier.Service, paySvc *payments.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator, pairSvc *pairs.Service) *Server {
+func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, tierSvc *tier.Service, paySvc *payments.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator, pairSvc *pairs.Service, filterSvc *filter.Service) *Server {
 	s := &Server{
 		cfg:              cfg,
 		storage:          store,
@@ -50,6 +52,7 @@ func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscri
 		signalNotifier:   notifier,
 		riskValidator:    validator,
 		pairSvc:          pairSvc,
+		filters:          filterSvc,
 		mux:              http.NewServeMux(),
 	}
 	s.routes()
@@ -79,6 +82,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/payments/binance/confirm", s.withUser(s.handlePaymentOrderConfirm))
 	s.mux.HandleFunc("/api/v1/payments/binance/webhook", s.handleBinancePayWebhook)
 	s.mux.HandleFunc("/api/v1/trading-pairs", s.withUser(s.handleTradingPairs))
+	s.mux.HandleFunc("/api/v1/filters/catalog", s.handleFilterCatalog)
+	s.mux.HandleFunc("/api/v1/filters/report", s.withUser(s.handleFilterReport))
 	s.mux.HandleFunc("/api/v1/admin/stats", s.withAdmin(s.handleAdminStats))
 	s.mux.HandleFunc("/api/v1/admin/trades", s.withAdmin(s.handleAdminTrades))
 	s.mux.HandleFunc("/api/v1/admin/users", s.withAdmin(s.handleAdminUsers))
