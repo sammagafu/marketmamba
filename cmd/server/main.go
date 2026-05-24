@@ -140,7 +140,7 @@ func main() {
 
 	if cfg.App.SignalBroadcastEnabled {
 		pub := signals.NewPublisher(
-			db, subs, tierSvc, tgBot, validator, decisionEngine,
+			db, subs, tierSvc, pairSvc, tgBot, validator, decisionEngine,
 			cfg.SignalSymbols(), cfg.SignalBroadcastInterval(),
 			cfg.App.SignalMinStrength,
 			cfg.App.DecisionEnabled,

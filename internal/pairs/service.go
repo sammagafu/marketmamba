@@ -10,7 +10,7 @@ import (
 	"forex-bot/internal/utils"
 )
 
-// Service manages per-user trading pair preferences.
+// Service manages per-user trading pair preferences and signal asset classes.
 type Service struct {
 	store *storage.PostgresStorage
 	cfg   *config.Config
@@ -20,15 +20,72 @@ func NewService(store *storage.PostgresStorage, cfg *config.Config) *Service {
 	return &Service{store: store, cfg: cfg}
 }
 
-func (s *Service) AvailableSymbols() []string {
-	if s.cfg != nil {
-		return s.cfg.SignalSymbols()
+func (s *Service) catalog() PlatformCatalog {
+	if s.cfg == nil {
+		return PlatformCatalog{
+			Forex:   []string{"EURUSD", "GBPUSD", "USDJPY"},
+			Indexes: []string{"US500", "USTEC", "VOL75"},
+			Crypto:  []string{"BTCUSD", "ETHUSD"},
+		}
 	}
-	return []string{"EURUSD", "BTCUSD"}
+	fx, idx, cry := s.cfg.SignalCatalog()
+	return PlatformCatalog{Forex: fx, Indexes: idx, Crypto: cry}
+}
+
+func (s *Service) AvailableSymbols() []string {
+	return s.catalog().All()
+}
+
+func (s *Service) availableForUser(userID int64) ([]string, error) {
+	prefs, err := s.GetSignalTypes(userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.catalog().FilterByTypes(prefs), nil
+}
+
+func (s *Service) GetSignalTypes(userID int64) (models.SignalTypePreferences, error) {
+	prefs, _, err := s.store.GetUserSignalPreferences(userID)
+	return prefs, err
+}
+
+// SetSignalTypes enables asset classes; disables pairs outside selected types.
+func (s *Service) SetSignalTypes(userID int64, prefs models.SignalTypePreferences) error {
+	if !AtLeastOneType(prefs) {
+		return fmt.Errorf("enable at least one signal type: forex, indexes, or crypto")
+	}
+	if err := s.store.UpsertUserSignalPreferences(userID, prefs); err != nil {
+		return err
+	}
+	allowed := s.catalog().FilterByTypes(prefs)
+	customized, err := s.store.HasUserTradingPairs(userID)
+	if err != nil {
+		return err
+	}
+	if !customized {
+		return s.SetPreferences(userID, defaultPrefs(allowed))
+	}
+	pairs, err := s.store.ListUserTradingPairs(userID)
+	if err != nil {
+		return err
+	}
+	allowedSet := make(map[string]bool)
+	for _, sym := range allowed {
+		allowedSet[sym] = true
+	}
+	for i := range pairs {
+		if !allowedSet[strings.ToUpper(pairs[i].Symbol)] {
+			pairs[i].ReceiveSignals = false
+			pairs[i].AutoTrade = false
+		}
+	}
+	return s.SetPreferences(userID, mergeAvailable(allowed, pairs))
 }
 
 func (s *Service) SeedDefaults(userID int64) error {
-	return s.SetPreferences(userID, defaultPrefs(s.AvailableSymbols()))
+	prefs := models.DefaultSignalTypes()
+	_ = s.store.UpsertUserSignalPreferences(userID, prefs)
+	return s.SetPreferences(userID, defaultPrefs(s.catalog().FilterByTypes(prefs)))
 }
 
 func defaultPrefs(symbols []string) []models.UserTradingPair {
@@ -44,7 +101,15 @@ func defaultPrefs(symbols []string) []models.UserTradingPair {
 }
 
 func (s *Service) GetResponse(userID int64) (*models.TradingPairsResponse, error) {
-	available := s.AvailableSymbols()
+	prefs, err := s.GetSignalTypes(userID)
+	if err != nil {
+		return nil, err
+	}
+	cat := s.catalog()
+	available, err := s.availableForUser(userID)
+	if err != nil {
+		return nil, err
+	}
 	customized, err := s.store.HasUserTradingPairs(userID)
 	if err != nil {
 		return nil, err
@@ -58,12 +123,15 @@ func (s *Service) GetResponse(userID int64) (*models.TradingPairsResponse, error
 	} else {
 		pairs = defaultPrefs(available)
 	}
+	merged := mergeAvailable(available, pairs)
 	return &models.TradingPairsResponse{
 		AvailableSymbols: available,
-		Pairs:            mergeAvailable(available, pairs),
+		Pairs:            merged,
 		Customized:       customized,
-		SignalSymbols:    symbolsWithFlag(pairs, true, false),
-		AutoTradeSymbols: symbolsWithFlag(pairs, false, true),
+		SignalSymbols:    symbolsWithFlag(merged, true, false),
+		AutoTradeSymbols: symbolsWithFlag(merged, false, true),
+		SignalTypes:      prefs,
+		AssetGroups:      cat.AssetGroups(prefs),
 	}, nil
 }
 
@@ -101,8 +169,12 @@ func symbolsWithFlag(pairs []models.UserTradingPair, signal, auto bool) []string
 
 // SetPreferences replaces user pair rows. At least one symbol must receive signals.
 func (s *Service) SetPreferences(userID int64, pairs []models.UserTradingPair) error {
+	available, err := s.availableForUser(userID)
+	if err != nil {
+		return err
+	}
 	allowed := make(map[string]bool)
-	for _, sym := range s.AvailableSymbols() {
+	for _, sym := range available {
 		allowed[sym] = true
 	}
 	var normalized []models.UserTradingPair
@@ -110,7 +182,7 @@ func (s *Service) SetPreferences(userID int64, pairs []models.UserTradingPair) e
 	for _, p := range pairs {
 		sym := strings.ToUpper(strings.TrimSpace(p.Symbol))
 		if !allowed[sym] {
-			return fmt.Errorf("symbol %s is not available on this platform", sym)
+			return fmt.Errorf("symbol %s is not available for your selected signal types", sym)
 		}
 		if !utils.IsValidSymbol(sym) {
 			return fmt.Errorf("invalid symbol: %s", sym)
@@ -126,14 +198,17 @@ func (s *Service) SetPreferences(userID int64, pairs []models.UserTradingPair) e
 		})
 	}
 	if signalCount == 0 {
-		return fmt.Errorf("enable signals for at least one pair")
+		return fmt.Errorf("enable signals for at least one pair in your selected types")
 	}
 	return s.store.ReplaceUserTradingPairs(userID, normalized)
 }
 
 // SetSymbolsQuick enables listed symbols (signals + auto); others off.
 func (s *Service) SetSymbolsQuick(userID int64, symbols []string) error {
-	allowed := s.AvailableSymbols()
+	allowed, err := s.availableForUser(userID)
+	if err != nil {
+		return err
+	}
 	want := make(map[string]bool)
 	for _, sym := range symbols {
 		sym = strings.ToUpper(strings.TrimSpace(sym))
@@ -170,4 +245,18 @@ func (s *Service) AutoTradeSymbols(userID int64) ([]string, error) {
 		return nil, err
 	}
 	return resp.AutoTradeSymbols, nil
+}
+
+// UserWantsSymbol checks asset-class prefs and per-pair flags.
+func (s *Service) UserWantsSymbol(userID int64, symbol string) (bool, error) {
+	sym := strings.ToUpper(strings.TrimSpace(symbol))
+	prefs, err := s.GetSignalTypes(userID)
+	if err != nil {
+		return false, err
+	}
+	class := s.catalog().ClassOf(sym)
+	if class != "" && !AllowsClass(prefs, class) {
+		return false, nil
+	}
+	return s.store.UserReceivesSignalForSymbol(userID, sym)
 }

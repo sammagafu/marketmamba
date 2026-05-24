@@ -36,14 +36,26 @@ func (s *Server) handleTradingPairsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Pairs []models.UserTradingPair `json:"pairs"`
+		Pairs       []models.UserTradingPair     `json:"pairs"`
+		SignalTypes *models.SignalTypePreferences `json:"signal_types"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if err := s.pairSvc.SetPreferences(uid, req.Pairs); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if req.SignalTypes != nil {
+		if err := s.pairSvc.SetSignalTypes(uid, *req.SignalTypes); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if len(req.Pairs) > 0 {
+		if err := s.pairSvc.SetPreferences(uid, req.Pairs); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else if req.SignalTypes == nil {
+		writeError(w, http.StatusBadRequest, "provide pairs or signal_types")
 		return
 	}
 	resp, err := s.pairSvc.GetResponse(uid)

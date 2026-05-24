@@ -81,7 +81,7 @@ func (s *Server) handleAdminBroadcastSignal(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	n, err := signals.PublishManual(s.storage, s.subs, s.tier, s.signalNotifier, s.riskValidator, minStrength, signal, req.Force)
+	n, err := signals.PublishManual(s.storage, s.subs, s.tier, s.pairSvc, s.signalNotifier, s.riskValidator, minStrength, signal, req.Force)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

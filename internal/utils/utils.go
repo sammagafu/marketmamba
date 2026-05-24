@@ -40,9 +40,10 @@ func ParsePrice(s string) (float64, error) {
 func IsValidSymbol(symbol string) bool {
 	symbol = strings.ToUpper(symbol)
 	validSymbols := []string{
-		"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD",
+		"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD", "USDCAD",
 		"EURJPY", "EURGBP", "GBPJPY", "CHFJPY",
-		"BTCUSD", "XAUUSD",
+		"BTCUSD", "ETHUSD", "XAUUSD",
+		"US500", "USTEC", "GER40", "UK100", "VOL75",
 	}
 
 	for _, valid := range validSymbols {

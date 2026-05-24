@@ -161,6 +161,8 @@ func (tb *TelegramBot) processMessage(msg *tgbotapi.Message) {
 		tb.handleDailyReport(chatID, userID)
 	case "/pairs":
 		tb.handlePairs(chatID, userID, parts[1:])
+	case "/signaltypes":
+		tb.handleSignalTypes(chatID, userID, parts[1:])
 	case "/autostart":
 		tb.handleAutoStart(chatID, userID)
 	case "/approveauto":
@@ -243,9 +245,11 @@ _Admins:_ /approveauto [user_id] · /revokeauto [user_id]
 https://marketmamba.kkooapp.co.tz
 
 *Signals & pairs:*
-/pairs — choose pairs for signals & auto-trade
+/signaltypes — forex, indexes, or crypto (bitcoin)
+/signaltypes forex crypto — example
+/pairs — per-symbol signals & auto-trade
 /pairs EURUSD BTCUSD — example
-Active subscribers receive alerts for *your* selected pairs.
+Active subscribers receive alerts for *your* selections only.
 
 ⚠️ Forex trading is high risk.`, userID, planLine)
 	tb.sendMessage(chatID, msg)

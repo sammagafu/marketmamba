@@ -14,9 +14,11 @@ type UserTradingPair struct {
 
 // TradingPairsResponse is returned by GET /api/v1/trading-pairs.
 type TradingPairsResponse struct {
-	AvailableSymbols []string           `json:"available_symbols"`
-	Pairs            []UserTradingPair  `json:"pairs"`
-	Customized       bool               `json:"customized"`
-	SignalSymbols    []string           `json:"signal_symbols"`
-	AutoTradeSymbols []string           `json:"auto_trade_symbols"`
+	AvailableSymbols []string              `json:"available_symbols"`
+	Pairs            []UserTradingPair     `json:"pairs"`
+	Customized       bool                  `json:"customized"`
+	SignalSymbols    []string              `json:"signal_symbols"`
+	AutoTradeSymbols []string              `json:"auto_trade_symbols"`
+	SignalTypes      SignalTypePreferences `json:"signal_types"`
+	AssetGroups      []SignalAssetGroup    `json:"asset_groups"`
 }
