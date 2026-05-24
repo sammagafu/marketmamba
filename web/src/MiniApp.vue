@@ -42,8 +42,14 @@ const showAllTrades = ref(false)
 const communityMessage = ref('')
 const aiTrainingNote = ref('')
 const assetPhaseUnlocked = ref(true)
+const displayName = ref('')
 
 const canTrade = computed(() => subscription.value?.can_trade === true)
+const welcomeLabel = computed(() => {
+  if (displayName.value) return `Welcome, ${displayName.value}`
+  return 'Your dashboard'
+})
+const openPositionsCount = computed(() => positions.value.length)
 const tierInfo = computed(() => subscription.value?.tier || null)
 
 const currentPlanId = computed(() => {
@@ -106,6 +112,11 @@ async function authMiniApp() {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || res.statusText)
   saveTelegramSession(data.session_token, data.telegram_id)
+  const u = data.user
+  displayName.value =
+    [u?.first_name, u?.last_name].filter(Boolean).join(' ') ||
+    u?.username ||
+    'Trader'
   return data
 }
 
@@ -327,9 +338,9 @@ onMounted(async () => {
     <header v-show="!splashVisible" class="tg-header">
       <div class="tg-header-main">
         <BrandLogo variant="icon" class="tg-logo" />
-        <div>
-          <span class="tg-eyebrow">Telegram</span>
-          <h1 class="tg-title">Market Mamba</h1>
+        <div class="tg-header-text">
+          <span class="tg-eyebrow">{{ TAGLINE }}</span>
+          <h1 class="tg-title">{{ welcomeLabel }}</h1>
         </div>
       </div>
       <div class="tg-header-actions">
@@ -338,7 +349,7 @@ onMounted(async () => {
           type="button"
           class="icon-btn"
           :disabled="refreshing"
-          aria-label="Refresh"
+          aria-label="Refresh dashboard"
           @click="refresh"
         >
           ↻
@@ -358,32 +369,7 @@ onMounted(async () => {
       <button type="button" class="btn btn-primary" @click="refresh">Try again</button>
     </div>
 
-    <main v-else-if="!splashVisible" class="tg-main">
-      <!-- Quick actions -->
-      <div class="quick-row" role="toolbar" aria-label="Quick actions">
-        <button
-          v-if="connectUrl"
-          type="button"
-          class="quick-chip"
-          @click="openLink(connectUrl)"
-        >
-          Connect broker
-        </button>
-        <button type="button" class="quick-chip" @click="openLink(botUrl)">
-          Open bot
-        </button>
-        <button
-          v-if="contactUrl"
-          type="button"
-          class="quick-chip quick-chip-muted"
-          @click="openLink(contactUrl)"
-        >
-          {{ contactLabel }}
-        </button>
-      </div>
-
-      <p class="tg-lead">{{ valueProposition }}</p>
-
+    <main v-else-if="!splashVisible" class="tg-main dash">
       <div
         v-if="!assetPhaseUnlocked && communityMessage"
         class="community-banner"
@@ -393,101 +379,179 @@ onMounted(async () => {
         <p v-if="aiTrainingNote" class="community-banner-ai">{{ aiTrainingNote }}</p>
       </div>
 
-      <!-- Membership -->
-      <section class="tg-card tg-card-accent">
+      <section class="dash-actions" aria-label="Quick actions">
+        <button
+          v-if="connectUrl"
+          type="button"
+          class="action-tile action-tile--primary"
+          @click="openLink(connectUrl)"
+        >
+          <span class="action-icon" aria-hidden="true">⚡</span>
+          <span class="action-title">Connect broker</span>
+          <span class="action-sub">Link MT4/MT5 for live execution</span>
+        </button>
+        <button type="button" class="action-tile" @click="openLink(botUrl)">
+          <span class="action-icon" aria-hidden="true">💬</span>
+          <span class="action-title">Open bot</span>
+          <span class="action-sub">Signals &amp; /autostart</span>
+        </button>
+        <button
+          v-if="contactUrl"
+          type="button"
+          class="action-tile"
+          @click="openLink(contactUrl)"
+        >
+          <span class="action-icon" aria-hidden="true">✉</span>
+          <span class="action-title">{{ contactLabel }}</span>
+          <span class="action-sub">Support &amp; Pro plans</span>
+        </button>
+        <button
+          v-if="!canTrade && !pendingOrder"
+          type="button"
+          class="action-tile action-tile--accent"
+          :disabled="paying"
+          @click="startPayment"
+        >
+          <span class="action-icon" aria-hidden="true">₮</span>
+          <span class="action-title">Subscribe</span>
+          <span class="action-sub">{{ priceUsdt }} USDT / month</span>
+        </button>
+      </section>
+
+      <section class="dash-bento" aria-label="Overview">
+        <article class="bento-card bento-card--hero">
+          <span class="bento-k">Net P/L today</span>
+          <span class="bento-v" :class="plClass(netProfit)">
+            {{ netProfit != null ? (netProfit >= 0 ? '+' : '') + '$' + netProfit.toFixed(2) : '—' }}
+          </span>
+        </article>
+        <article class="bento-card">
+          <span class="bento-k">Trades today</span>
+          <span class="bento-v">{{ dailyStats?.trade_count ?? 0 }}</span>
+        </article>
+        <article class="bento-card">
+          <span class="bento-k">Open positions</span>
+          <span class="bento-v">{{ openPositionsCount }}</span>
+        </article>
+        <article class="bento-card">
+          <span class="bento-k">Plan</span>
+          <span class="bento-v bento-v-sm">{{ planLabel }}</span>
+          <span class="bento-meta">{{ daysLeft }} days left</span>
+        </article>
+      </section>
+
+      <section class="tg-card tg-card-accent dash-membership">
         <div class="card-head">
           <h2 class="card-label">Membership</h2>
           <span class="chip">{{ planLabel }}</span>
         </div>
-
-        <div class="stat-row">
-          <div class="stat">
+        <div class="membership-strip">
+          <div class="membership-item">
             <span class="stat-k">Status</span>
             <span class="stat-v">{{ planStatus }}</span>
           </div>
-          <div class="stat">
-            <span class="stat-k">Days left</span>
-            <span class="stat-v">{{ daysLeft }}</span>
-          </div>
-          <div class="stat">
+          <div class="membership-item">
             <span class="stat-k">Renews</span>
             <span class="stat-v stat-v-sm">{{ expiresLabel }}</span>
           </div>
-          <div class="stat">
-            <span class="stat-k">Price</span>
-            <span class="stat-v">{{ priceUsdt }} USDT</span>
+          <div class="membership-item">
+            <span class="stat-k">Signals</span>
+            <span class="stat-v stat-v-sm">{{ activeSignalLabels.join(' · ') || '—' }}</span>
           </div>
         </div>
-
         <p v-if="!canTrade" class="banner banner-warn">{{ subscription?.message }}</p>
         <p v-else class="banner banner-ok">Trading enabled on your plan</p>
-
       </section>
 
-      <!-- Plans & pricing -->
-      <section v-if="packages.length" class="tg-card">
+      <section v-if="pendingOrder" class="tg-card dash-panel-wide">
         <div class="card-head">
-          <h2 class="card-label">Plans & pricing</h2>
+          <h2 class="card-label">Complete payment</h2>
+          <span class="chip chip-warn">Pending</span>
         </div>
-        <p class="billing-note packages-note">{{ paymentNote }}</p>
-        <ul class="package-list">
-          <li
-            v-for="pkg in packages"
-            :key="pkg.id"
-            class="package-card"
-            :class="{
-              current: isCurrentPlan(pkg),
-              recommended: pkg.recommended,
-            }"
-          >
-            <div class="package-head">
-              <div>
-                <h3 class="package-name">{{ pkg.name }}</h3>
-                <p class="package-desc">{{ pkg.description }}</p>
-              </div>
-              <span v-if="isCurrentPlan(pkg)" class="package-badge">Current</span>
-              <span v-else-if="pkg.recommended" class="package-badge package-badge-rec">Popular</span>
+        <p class="ref-line">
+          Ref <code>{{ pendingOrder.merchant_trade_no }}</code>
+        </p>
+        <ol v-if="instructions?.step1" class="steps">
+          <li v-if="instructions.step1">{{ instructions.step1 }}</li>
+          <li v-if="instructions.step2">{{ instructions.step2 }}</li>
+          <li v-if="instructions.step3">{{ instructions.step3 }}</li>
+        </ol>
+        <button
+          v-if="pendingOrder.checkout_url"
+          type="button"
+          class="btn btn-secondary"
+          @click="openLink(pendingOrder.checkout_url)"
+        >
+          Open Binance Pay
+        </button>
+        <label class="field">
+          <span class="field-label">Transaction ID</span>
+          <input
+            v-model="txRef"
+            type="text"
+            class="field-input"
+            placeholder="Paste after sending USDT"
+            autocomplete="off"
+          />
+        </label>
+        <button type="button" class="btn btn-primary" :disabled="paying" @click="confirmPayment">
+          Confirm payment
+        </button>
+      </section>
+
+      <div class="dash-split">
+      <!-- Positions -->
+      <section class="tg-card dash-panel">
+        <div class="card-head">
+          <h2 class="card-label">Open positions</h2>
+          <span class="count">{{ openPositionsCount }}</span>
+        </div>
+        <p v-if="!positions.length" class="empty">No open positions.</p>
+        <ul v-else class="list-cards">
+          <li v-for="p in positions" :key="p.id || p.symbol + p.type" class="list-card">
+            <div class="list-card-main">
+              <strong class="list-card-title">{{ p.symbol }}</strong>
+              <span class="side" :class="p.type === 'BUY' ? 'buy' : 'sell'">{{ p.type }}</span>
             </div>
-            <p class="package-price">{{ pkg.price_label }}</p>
-            <ul class="package-features">
-              <li v-for="(feat, i) in pkg.features" :key="i">{{ feat }}</li>
-            </ul>
-            <button
-              v-if="pkg.contact_only"
-              type="button"
-              class="btn btn-secondary package-btn"
-              @click="onPackageAction(pkg)"
-            >
-              {{ contactLabel }}
-            </button>
-            <button
-              v-else-if="pkg.id === 'monthly' && !isCurrentPlan(pkg) && !pendingOrder"
-              type="button"
-              class="btn btn-primary package-btn"
-              :disabled="paying"
-              @click="onPackageAction(pkg)"
-            >
-              {{ paying ? 'Please wait…' : subscribeLabel }}
-            </button>
+            <span class="list-card-value" :class="plClass(p.profit)">
+              ${{ Number(p.profit || 0).toFixed(2) }}
+            </span>
           </li>
         </ul>
       </section>
 
-      <!-- Signal types -->
-      <section v-if="activeSignalLabels.length" class="tg-card">
+      <!-- Trades -->
+      <section class="tg-card dash-panel">
         <div class="card-head">
-          <h2 class="card-label">Your signal types</h2>
+          <h2 class="card-label">Recent trades</h2>
+          <span class="count">{{ trades.length }}</span>
         </div>
-        <div class="type-chips">
-          <span v-for="label in activeSignalLabels" :key="label" class="type-chip">{{ label }}</span>
-        </div>
-        <p class="card-hint">
-          Change types in the bot: <code>/signaltypes</code> or on the web dashboard.
-        </p>
+        <p v-if="!trades.length" class="empty">No trades yet. Connect a broker and use /autostart in the bot.</p>
+        <ul v-else class="list-cards">
+          <li v-for="t in visibleTrades" :key="t.id" class="list-card list-card--stack">
+            <div class="list-card-top">
+              <div class="list-card-main">
+                <strong class="list-card-title">{{ t.symbol }}</strong>
+                <span class="side" :class="t.type === 'BUY' ? 'buy' : 'sell'">{{ t.type }}</span>
+              </div>
+              <span class="status-badge">{{ t.status }}</span>
+            </div>
+            <p class="list-card-meta">{{ fmtTime(t.created_at) }} · {{ Number(t.entry_price).toFixed(5) }}</p>
+            <p class="list-card-pl" :class="plClass(t.profit)">P/L {{ fmtProfit(t) }}</p>
+          </li>
+        </ul>
+        <button
+          v-if="trades.length > 5"
+          type="button"
+          class="btn-text"
+          @click="showAllTrades = !showAllTrades"
+        >
+          {{ showAllTrades ? 'Show less' : `Show all ${trades.length}` }}
+        </button>
       </section>
+      </div>
 
-      <!-- Tier usage -->
-      <section v-if="tierInfo" class="tg-card">
+      <section v-if="tierInfo" class="tg-card dash-panel-wide">
         <div class="card-head">
           <h2 class="card-label">Plan usage</h2>
           <span class="chip chip-muted">{{ tierInfo.limits?.plan }}</span>
@@ -532,111 +596,58 @@ onMounted(async () => {
         </ul>
       </section>
 
-      <!-- Payment pending -->
-      <section v-if="pendingOrder" class="tg-card">
-        <div class="card-head">
-          <h2 class="card-label">Complete payment</h2>
-          <span class="chip chip-warn">Pending</span>
-        </div>
-        <p class="ref-line">
-          Ref <code>{{ pendingOrder.merchant_trade_no }}</code>
-        </p>
-        <ol v-if="instructions?.step1" class="steps">
-          <li v-if="instructions.step1">{{ instructions.step1 }}</li>
-          <li v-if="instructions.step2">{{ instructions.step2 }}</li>
-          <li v-if="instructions.step3">{{ instructions.step3 }}</li>
-        </ol>
-        <button
-          v-if="pendingOrder.checkout_url"
-          type="button"
-          class="btn btn-secondary"
-          @click="openLink(pendingOrder.checkout_url)"
-        >
-          Open Binance Pay
-        </button>
-        <label class="field">
-          <span class="field-label">Transaction ID</span>
-          <input
-            v-model="txRef"
-            type="text"
-            class="field-input"
-            placeholder="Paste after sending USDT"
-            autocomplete="off"
-          />
-        </label>
-        <button type="button" class="btn btn-primary" :disabled="paying" @click="confirmPayment">
-          Confirm payment
-        </button>
-      </section>
-
-      <!-- Today -->
-      <section class="tg-card">
-        <h2 class="card-label solo">Today</h2>
-        <div class="stat-row stat-row-3">
-          <div class="stat">
-            <span class="stat-k">Trades</span>
-            <span class="stat-v">{{ dailyStats?.trade_count ?? 0 }}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-k">Net P/L</span>
-            <span class="stat-v" :class="plClass(netProfit)">
-              {{ netProfit != null ? (netProfit >= 0 ? '+' : '') + '$' + netProfit.toFixed(2) : '—' }}
-            </span>
-          </div>
-          <div class="stat">
-            <span class="stat-k">Closed</span>
-            <span class="stat-v">{{ closedCount }}</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Positions -->
-      <section class="tg-card">
-        <div class="card-head">
-          <h2 class="card-label">Open positions</h2>
-          <span class="count">{{ positions.length }}</span>
-        </div>
-        <p v-if="!positions.length" class="empty">No open positions.</p>
-        <ul v-else class="pos-list">
-          <li v-for="p in positions" :key="p.id || p.symbol + p.type" class="pos-item">
-            <div>
-              <strong>{{ p.symbol }}</strong>
-              <span class="side" :class="p.type === 'BUY' ? 'buy' : 'sell'">{{ p.type }}</span>
-            </div>
-            <span :class="plClass(p.profit)">${{ Number(p.profit || 0).toFixed(2) }}</span>
-          </li>
-        </ul>
-      </section>
-
-      <!-- Trades -->
-      <section class="tg-card">
-        <div class="card-head">
-          <h2 class="card-label">Recent trades</h2>
-          <span class="count">{{ trades.length }}</span>
-        </div>
-        <p v-if="!trades.length" class="empty">No trades yet. Connect a broker and use /autostart in the bot.</p>
-        <ul v-else class="trade-list">
-          <li v-for="t in visibleTrades" :key="t.id" class="trade-item">
-            <div class="trade-top">
+      <details v-if="packages.length" class="dash-details tg-card">
+        <summary class="dash-details-summary">
+          <span class="card-label">Plans &amp; pricing</span>
+          <span class="dash-details-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="dash-details-body">
+        <p class="billing-note packages-note">{{ paymentNote }}</p>
+        <ul class="package-list">
+          <li
+            v-for="pkg in packages"
+            :key="pkg.id"
+            class="package-card"
+            :class="{
+              current: isCurrentPlan(pkg),
+              recommended: pkg.recommended,
+            }"
+          >
+            <div class="package-head">
               <div>
-                <strong>{{ t.symbol }}</strong>
-                <span class="side" :class="t.type === 'BUY' ? 'buy' : 'sell'">{{ t.type }}</span>
+                <h3 class="package-name">{{ pkg.name }}</h3>
+                <p class="package-desc">{{ pkg.description }}</p>
               </div>
-              <span class="status">{{ t.status }}</span>
+              <span v-if="isCurrentPlan(pkg)" class="package-badge">Current</span>
+              <span v-else-if="pkg.recommended" class="package-badge package-badge-rec">Popular</span>
             </div>
-            <p class="trade-meta">{{ fmtTime(t.created_at) }} · {{ Number(t.entry_price).toFixed(5) }}</p>
-            <p class="trade-pl" :class="plClass(t.profit)">P/L {{ fmtProfit(t) }}</p>
+            <p class="package-price">{{ pkg.price_label }}</p>
+            <ul class="package-features">
+              <li v-for="(feat, i) in pkg.features" :key="i">{{ feat }}</li>
+            </ul>
+            <button
+              v-if="pkg.contact_only"
+              type="button"
+              class="btn btn-secondary package-btn"
+              @click="onPackageAction(pkg)"
+            >
+              {{ contactLabel }}
+            </button>
+            <button
+              v-else-if="pkg.id === 'monthly' && !isCurrentPlan(pkg) && !pendingOrder"
+              type="button"
+              class="btn btn-primary package-btn"
+              :disabled="paying"
+              @click="onPackageAction(pkg)"
+            >
+              {{ paying ? 'Please wait…' : subscribeLabel }}
+            </button>
           </li>
         </ul>
-        <button
-          v-if="trades.length > 5"
-          type="button"
-          class="btn-text"
-          @click="showAllTrades = !showAllTrades"
-        >
-          {{ showAllTrades ? 'Show less' : `Show all ${trades.length}` }}
-        </button>
-      </section>
+        </div>
+      </details>
+
+      <p class="tg-lead">{{ valueProposition }}</p>
 
       <!-- Bot tips -->
       <section class="tg-card tg-card-dim">
@@ -661,18 +672,22 @@ onMounted(async () => {
 
 <style scoped>
 .mini-app {
-  --mm-bg: #000000;
-  --mm-surface: #0a0a0a;
-  --mm-raised: #111111;
-  --mm-border: #1e1e1e;
+  --mm-bg: #050505;
+  --mm-surface: #0c0c0c;
+  --mm-raised: #141414;
+  --mm-border: #232323;
   --mm-text: #f3f4f6;
   --mm-muted: #9ca3af;
-  --mm-brand: #3dff7a;
-  --mm-brand-soft: rgba(61, 255, 122, 0.12);
-  --mm-on-brand: #041a0c;
+  --mm-brand: #b8ff3d;
+  --mm-brand-soft: rgba(184, 255, 61, 0.14);
+  --mm-on-brand: #0a1404;
   --mm-warn: #e5b84a;
   --mm-warn-soft: rgba(229, 184, 74, 0.12);
   --mm-loss: #f87171;
+  --dash-radius: 16px;
+  --dash-pad: clamp(0.75rem, 3.5vw, 1.15rem);
+  --dash-max: 520px;
+  --dash-gap: 0.75rem;
 
   max-width: 100%;
   margin: 0 auto;
@@ -707,6 +722,24 @@ onMounted(async () => {
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
+  flex: 1;
+}
+
+.tg-header-text {
+  min-width: 0;
+}
+
+.tg-header-text .tg-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(52vw, 14rem);
+}
+
+@media (min-width: 380px) {
+  .tg-header-text .tg-title {
+    max-width: 16rem;
+  }
 }
 
 .tg-logo {
@@ -778,22 +811,34 @@ onMounted(async () => {
 
 .tg-main {
   flex: 1;
-  padding: 0.85rem 1rem 0.5rem;
+  padding: var(--dash-pad);
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.tg-main.dash {
+  width: 100%;
+  max-width: var(--dash-max);
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-gap);
 }
 
 .tg-lead {
-  margin: 0 0 0.85rem;
+  margin: 0;
   font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--mm-muted);
+  text-align: center;
 }
 
 .community-banner {
-  margin: 0 0 0.85rem;
-  padding: 0.75rem 0.85rem;
-  border-radius: 10px;
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  background: rgba(34, 197, 94, 0.07);
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--dash-radius);
+  border: 1px solid rgba(184, 255, 61, 0.28);
+  background: var(--mm-brand-soft);
 }
 .community-banner-body,
 .community-banner-ai {
@@ -807,45 +852,283 @@ onMounted(async () => {
   color: var(--mm-muted);
 }
 
-.quick-row {
-  display: flex;
-  gap: 0.45rem;
-  overflow-x: auto;
-  padding-bottom: 0.65rem;
-  margin-bottom: 0.25rem;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+/* Action tiles — responsive grid */
+.dash-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
 }
 
-.quick-row::-webkit-scrollbar {
+@media (min-width: 420px) {
+  .dash-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.action-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.9rem 1rem;
+  min-height: 5.5rem;
+  border-radius: var(--dash-radius);
+  border: 1px solid var(--mm-border);
+  background: var(--mm-surface);
+  color: var(--mm-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.action-tile:active {
+  transform: scale(0.98);
+}
+
+.action-tile--primary {
+  grid-column: 1 / -1;
+  border-color: rgba(184, 255, 61, 0.45);
+  background: linear-gradient(145deg, rgba(184, 255, 61, 0.22), rgba(184, 255, 61, 0.06));
+}
+
+.action-tile--accent {
+  border-color: var(--mm-brand);
+  background: var(--mm-brand-soft);
+}
+
+.action-tile--accent .action-title {
+  color: var(--mm-brand);
+}
+
+.action-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.action-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.action-sub {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--mm-muted);
+}
+
+/* Bento stats */
+.dash-bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.bento-card {
+  padding: 0.85rem 1rem;
+  border-radius: var(--dash-radius);
+  border: 1px solid var(--mm-border);
+  background: var(--mm-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 4.5rem;
+}
+
+.bento-card--hero {
+  grid-column: 1 / -1;
+  min-height: 5.25rem;
+  border-color: rgba(184, 255, 61, 0.35);
+  background: linear-gradient(160deg, var(--mm-surface) 0%, rgba(184, 255, 61, 0.08) 100%);
+}
+
+.bento-k {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mm-muted);
+}
+
+.bento-v {
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.bento-card--hero .bento-v {
+  font-size: 1.65rem;
+}
+
+.bento-v-sm {
+  font-size: 1rem;
+}
+
+.bento-meta {
+  font-size: 0.7rem;
+  color: var(--mm-muted);
+}
+
+.dash-membership {
+  margin-bottom: 0;
+}
+
+.membership-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 360px) {
+  .membership-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+.membership-item {
+  min-width: 0;
+}
+
+.dash-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--dash-gap);
+}
+
+@media (min-width: 480px) {
+  .dash-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.dash-panel {
+  margin-bottom: 0;
+  height: fit-content;
+}
+
+.dash-panel-wide {
+  margin-bottom: 0;
+}
+
+.dash-details {
+  margin-bottom: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dash-details-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.dash-details-summary::-webkit-details-marker {
   display: none;
 }
 
-.quick-chip {
-  flex-shrink: 0;
-  padding: 0.45rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--mm-brand);
-  background: var(--mm-brand-soft);
-  color: var(--mm-brand);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
+.dash-details-chevron {
+  font-size: 1.25rem;
+  color: var(--mm-muted);
+  transition: transform 0.2s;
 }
 
-.quick-chip-muted {
-  border-color: var(--mm-border);
+.dash-details[open] .dash-details-chevron {
+  transform: rotate(90deg);
+}
+
+.dash-details-body {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--mm-border);
+}
+
+.list-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.list-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: var(--mm-raised);
+  border: 1px solid var(--mm-border);
+}
+
+.list-card--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.list-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.list-card-main {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.list-card-title {
+  font-size: 0.9rem;
+  letter-spacing: -0.02em;
+}
+
+.list-card-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-card-meta {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--mm-muted);
+}
+
+.list-card-pl {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.status-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
   background: var(--mm-raised);
   color: var(--mm-muted);
+  border: 1px solid var(--mm-border);
+  flex-shrink: 0;
 }
 
 .tg-card {
   background: var(--mm-surface);
   border: 1px solid var(--mm-border);
-  border-radius: 12px;
+  border-radius: var(--dash-radius);
   padding: 1rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0;
 }
 
 .tg-card-accent {
