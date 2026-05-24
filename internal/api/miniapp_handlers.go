@@ -10,6 +10,7 @@ import (
 	"forex-bot/internal/models"
 	"forex-bot/internal/positions"
 	"forex-bot/internal/telegramlogin"
+	"forex-bot/internal/tier"
 )
 
 type webappAuthRequest struct {
@@ -71,17 +72,19 @@ func (s *Server) handleMiniAppDashboard(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"trades":       trades,
-		"positions":    posList,
-		"payments":     orders,
-		"daily_stats":  today,
-		"subscription": subStatus,
-		"pricing":      s.payments.Pricing(),
-		"public_site_url": s.cfg.App.PublicSiteURL,
-		"connect_url":        strings.TrimRight(s.cfg.App.PublicSiteURL, "/") + "/#/connect",
-		"value_proposition":  s.cfg.App.ValueProposition,
-		"contact_us_url":     s.cfg.App.ContactUsURL,
-		"contact_us_label":   s.cfg.App.ContactUsLabel,
-		"payment_note":       "USDT via Binance only — no cards.",
+		"trades":                trades,
+		"positions":             posList,
+		"payments":              orders,
+		"daily_stats":           today,
+		"subscription":          subStatus,
+		"packages":              tier.PublicPackages(s.cfg.Payments.SubscriptionPriceUSDT, s.cfg.App.FreeTrialDays),
+		"pricing":               s.payments.Pricing(),
+		"public_site_url":       s.cfg.App.PublicSiteURL,
+		"connect_url":           strings.TrimRight(s.cfg.App.PublicSiteURL, "/") + "/#/connect",
+		"value_proposition":     s.cfg.App.ValueProposition,
+		"contact_us_url":        s.cfg.App.ContactUsURL,
+		"contact_us_label":      s.cfg.App.ContactUsLabel,
+		"payment_note":          "USDT via Binance only — no cards.",
+		"telegram_bot_username": s.cfg.Telegram.BotUsername,
 	})
 }

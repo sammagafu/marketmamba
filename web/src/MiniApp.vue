@@ -1,28 +1,49 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { API, saveTelegramSession, api } from './api'
-import { initTelegramWebApp, isTelegramMiniApp, telegramInitData } from './telegramWebApp'
+import {
+  initTelegramWebApp,
+  isTelegramMiniApp,
+  telegramInitData,
+  hapticLight,
+  hapticSuccess,
+  showMainButton,
+  hideMainButton,
+} from './telegramWebApp'
 import BrandLogo from './components/BrandLogo.vue'
 import { VALUE_PROPOSITION, PAYMENT_NOTE } from './brand'
 
 const loading = ref(true)
+const refreshing = ref(false)
 const error = ref('')
 const trades = ref([])
 const positions = ref([])
 const subscription = ref(null)
 const pricing = ref(null)
+const packages = ref([])
 const instructions = ref(null)
 const pendingOrder = ref(null)
 const txRef = ref('')
 const paying = ref(false)
 const dailyStats = ref(null)
 const connectUrl = ref('')
+const botUsername = ref('market_mamba_bot')
 const valueProposition = ref('')
 const contactUrl = ref('')
 const contactLabel = ref('Contact us')
 const paymentNote = ref('')
+const signalTypes = ref({ forex: true, indexes: true, crypto: true })
+const showAllTrades = ref(false)
 
 const canTrade = computed(() => subscription.value?.can_trade === true)
+const tierInfo = computed(() => subscription.value?.tier || null)
+
+const currentPlanId = computed(() => {
+  const plan =
+    subscription.value?.subscription?.plan || tierInfo.value?.limits?.plan || 'trial'
+  return String(plan).toLowerCase()
+})
+
 const planLabel = computed(() => {
   const sub = subscription.value?.subscription
   if (!sub) return 'Trial'
@@ -36,8 +57,7 @@ const expiresLabel = computed(() => {
 })
 const daysLeft = computed(() => subscription.value?.days_left ?? '—')
 const priceUsdt = computed(() => pricing.value?.price_usdt ?? 10)
-const trialDays = computed(() => pricing.value?.trial_days ?? 5)
-const subscribeLabel = computed(() => `Subscribe · ${priceUsdt.value} USDT / month`)
+const subscribeLabel = computed(() => `Subscribe · ${priceUsdt.value} USDT`)
 
 const netProfit = computed(() => {
   const n = dailyStats.value?.net_profit
@@ -46,6 +66,24 @@ const netProfit = computed(() => {
 })
 
 const closedCount = computed(() => trades.value.filter((t) => t.status === 'CLOSED').length)
+const visibleTrades = computed(() =>
+  showAllTrades.value ? trades.value : trades.value.slice(0, 5),
+)
+
+const activeSignalLabels = computed(() => {
+  const labels = []
+  if (signalTypes.value.forex) labels.push('Forex')
+  if (signalTypes.value.indexes) labels.push('Indexes')
+  if (signalTypes.value.crypto) labels.push('Crypto')
+  return labels
+})
+
+const botUrl = computed(() => `https://t.me/${botUsername.value}`)
+
+function usagePct(used, max) {
+  if (max == null || max <= 0) return 0
+  return Math.min(100, Math.round((Number(used) / Number(max)) * 100))
+}
 
 async function authMiniApp() {
   const initData = telegramInitData()
@@ -63,27 +101,59 @@ async function authMiniApp() {
   return data
 }
 
+async function loadPairs() {
+  try {
+    const data = await api('/trading-pairs')
+    if (data.signal_types) {
+      signalTypes.value = {
+        forex: !!data.signal_types.forex,
+        indexes: !!data.signal_types.indexes,
+        crypto: !!data.signal_types.crypto,
+      }
+    }
+  } catch {
+    /* optional */
+  }
+}
+
 async function loadDashboard() {
   const data = await api('/miniapp/dashboard')
   trades.value = data.trades || []
   positions.value = data.positions || []
   subscription.value = data.subscription || {}
   pricing.value = data.pricing || {}
+  packages.value = data.packages || []
   dailyStats.value = data.daily_stats || null
   connectUrl.value = data.connect_url || ''
+  botUsername.value = data.telegram_bot_username || 'market_mamba_bot'
   valueProposition.value = data.value_proposition || VALUE_PROPOSITION
   contactUrl.value = data.contact_us_url || ''
   contactLabel.value = data.contact_us_label || 'Contact us'
   paymentNote.value = data.payment_note || PAYMENT_NOTE
 }
 
+async function refresh() {
+  refreshing.value = true
+  error.value = ''
+  try {
+    await Promise.all([loadDashboard(), loadPairs()])
+    hapticLight()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    refreshing.value = false
+  }
+}
+
 async function startPayment() {
+  hapticLight()
   paying.value = true
   error.value = ''
   try {
     const data = await api('/payments/binance/order', { method: 'POST' })
     pendingOrder.value = data.order
     instructions.value = data.instructions || {}
+    hideMainButton()
     if (data.order?.checkout_url && window.Telegram?.WebApp?.openLink) {
       window.Telegram.WebApp.openLink(data.order.checkout_url)
     }
@@ -99,6 +169,7 @@ async function confirmPayment() {
     error.value = 'Enter your Binance transaction ID'
     return
   }
+  hapticLight()
   paying.value = true
   error.value = ''
   try {
@@ -109,6 +180,8 @@ async function confirmPayment() {
     pendingOrder.value = data.order
     subscription.value = data.subscription
     await loadDashboard()
+    await loadPairs()
+    hapticSuccess()
   } catch (e) {
     error.value = e.message
   } finally {
@@ -118,6 +191,7 @@ async function confirmPayment() {
 
 function openLink(url) {
   if (!url) return
+  hapticLight()
   if (window.Telegram?.WebApp?.openLink) {
     window.Telegram.WebApp.openLink(url)
   } else {
@@ -146,6 +220,34 @@ function plClass(n) {
   return Number(n) >= 0 ? 'pos' : 'neg'
 }
 
+function isCurrentPlan(pkg) {
+  return pkg.id === currentPlanId.value
+}
+
+function onPackageAction(pkg) {
+  if (pkg.contact_only) {
+    openLink(contactUrl.value || botUrl.value)
+    return
+  }
+  if (pkg.id === 'monthly' && !isCurrentPlan(pkg)) {
+    startPayment()
+  }
+}
+
+function syncMainButton() {
+  if (loading.value || pendingOrder.value) {
+    hideMainButton()
+    return
+  }
+  if (!canTrade.value) {
+    showMainButton(subscribeLabel.value, startPayment)
+  } else {
+    hideMainButton()
+  }
+}
+
+watch([canTrade, pendingOrder, loading], syncMainButton)
+
 onMounted(async () => {
   if (!isTelegramMiniApp()) {
     loading.value = false
@@ -155,7 +257,8 @@ onMounted(async () => {
   initTelegramWebApp()
   try {
     await authMiniApp()
-    await loadDashboard()
+    await Promise.all([loadDashboard(), loadPairs()])
+    syncMainButton()
   } catch (e) {
     error.value = e.message
   } finally {
@@ -166,106 +269,218 @@ onMounted(async () => {
 
 <template>
   <div class="mini-app">
-    <header class="corp-header">
-      <div class="corp-header-main">
-        <BrandLogo variant="icon" class="corp-logo" />
-        <div class="corp-brand">
-          <span class="corp-eyebrow">Client portal</span>
-          <h1 class="corp-title">Market Mamba</h1>
+    <header class="tg-header">
+      <div class="tg-header-main">
+        <BrandLogo variant="icon" class="tg-logo" />
+        <div>
+          <span class="tg-eyebrow">Telegram</span>
+          <h1 class="tg-title">Market Mamba</h1>
         </div>
       </div>
-      <span v-if="!loading" class="status-pill" :class="canTrade ? 'status-active' : 'status-pending'">
-        {{ canTrade ? 'Active' : 'Limited' }}
-      </span>
+      <div class="tg-header-actions">
+        <button
+          v-if="!loading"
+          type="button"
+          class="icon-btn"
+          :disabled="refreshing"
+          aria-label="Refresh"
+          @click="refresh"
+        >
+          ↻
+        </button>
+        <span class="status-pill" :class="canTrade ? 'on' : 'off'">
+          {{ canTrade ? 'Active' : 'Limited' }}
+        </span>
+      </div>
     </header>
 
     <div v-if="loading" class="state-panel">
       <div class="spinner" aria-hidden="true" />
-      <p class="state-title">Loading your account</p>
-      <p class="state-sub">Secure session via Telegram</p>
+      <p class="state-title">Loading account</p>
+      <p class="state-sub">Signed in via Telegram</p>
     </div>
 
     <div v-else-if="error && !trades.length && !positions.length" class="state-panel state-error">
-      <p class="state-title">Unable to load</p>
+      <p class="state-title">Could not load</p>
       <p class="state-sub">{{ error }}</p>
+      <button type="button" class="btn btn-primary" @click="refresh">Try again</button>
     </div>
 
-    <main v-else class="corp-main">
-      <p class="corp-tagline">{{ valueProposition }}</p>
+    <main v-else class="tg-main">
+      <!-- Quick actions -->
+      <div class="quick-row" role="toolbar" aria-label="Quick actions">
+        <button
+          v-if="connectUrl"
+          type="button"
+          class="quick-chip"
+          @click="openLink(connectUrl)"
+        >
+          Connect broker
+        </button>
+        <button type="button" class="quick-chip" @click="openLink(botUrl)">
+          Open bot
+        </button>
+        <button
+          v-if="contactUrl"
+          type="button"
+          class="quick-chip quick-chip-muted"
+          @click="openLink(contactUrl)"
+        >
+          {{ contactLabel }}
+        </button>
+      </div>
 
-      <!-- Subscription -->
-      <section class="corp-card corp-card-highlight">
+      <p class="tg-lead">{{ valueProposition }}</p>
+
+      <!-- Membership -->
+      <section class="tg-card tg-card-accent">
         <div class="card-head">
-          <h2 class="card-title">Membership</h2>
-          <span class="plan-chip">{{ planLabel }}</span>
+          <h2 class="card-label">Membership</h2>
+          <span class="chip">{{ planLabel }}</span>
         </div>
 
-        <div class="metric-grid">
-          <div class="metric">
-            <span class="metric-label">Status</span>
-            <span class="metric-value">{{ planStatus }}</span>
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-k">Status</span>
+            <span class="stat-v">{{ planStatus }}</span>
           </div>
-          <div class="metric">
-            <span class="metric-label">Renews / ends</span>
-            <span class="metric-value">{{ expiresLabel }}</span>
+          <div class="stat">
+            <span class="stat-k">Days left</span>
+            <span class="stat-v">{{ daysLeft }}</span>
           </div>
-          <div class="metric">
-            <span class="metric-label">Days remaining</span>
-            <span class="metric-value">{{ daysLeft }}</span>
+          <div class="stat">
+            <span class="stat-k">Renews</span>
+            <span class="stat-v stat-v-sm">{{ expiresLabel }}</span>
           </div>
-          <div class="metric">
-            <span class="metric-label">Billing</span>
-            <span class="metric-value">{{ priceUsdt }} USDT/mo</span>
+          <div class="stat">
+            <span class="stat-k">Price</span>
+            <span class="stat-v">{{ priceUsdt }} USDT</span>
           </div>
         </div>
 
-        <p v-if="!canTrade" class="alert alert-warn">{{ subscription?.message }}</p>
-        <p v-else class="alert alert-ok">Account in good standing — trading enabled</p>
+        <p v-if="!canTrade" class="banner banner-warn">{{ subscription?.message }}</p>
+        <p v-else class="banner banner-ok">Trading enabled on your plan</p>
 
-        <div class="pricing-block">
-          <p class="pricing-lead">
-            {{ trialDays }}-day evaluation period, then
-            <strong>{{ priceUsdt }} USDT</strong> per month via Binance.
-          </p>
-          <p class="pricing-note">{{ paymentNote }}</p>
-        </div>
-
-        <div class="btn-stack">
-          <button type="button" class="btn btn-primary" :disabled="paying" @click="startPayment">
-            {{ paying ? 'Processing…' : subscribeLabel }}
-          </button>
-          <button
-            v-if="connectUrl"
-            type="button"
-            class="btn btn-secondary"
-            @click="openLink(connectUrl)"
-          >
-            Connect broker account
-          </button>
-          <button
-            v-if="contactUrl"
-            type="button"
-            class="btn btn-ghost"
-            @click="openLink(contactUrl)"
-          >
-            {{ contactLabel }} · Enterprise &amp; Pro
-          </button>
-        </div>
       </section>
 
-      <!-- Payment in progress -->
-      <section v-if="pendingOrder" class="corp-card">
+      <!-- Plans & pricing -->
+      <section v-if="packages.length" class="tg-card">
         <div class="card-head">
-          <h2 class="card-title">Payment confirmation</h2>
-          <span class="plan-chip plan-chip-warn">Pending</span>
+          <h2 class="card-label">Plans & pricing</h2>
         </div>
-        <dl class="detail-list">
-          <div class="detail-row">
-            <dt>Reference</dt>
-            <dd><code>{{ pendingOrder.merchant_trade_no }}</code></dd>
-          </div>
-        </dl>
-        <ol v-if="instructions?.step1" class="steps-list">
+        <p class="billing-note packages-note">{{ paymentNote }}</p>
+        <ul class="package-list">
+          <li
+            v-for="pkg in packages"
+            :key="pkg.id"
+            class="package-card"
+            :class="{
+              current: isCurrentPlan(pkg),
+              recommended: pkg.recommended,
+            }"
+          >
+            <div class="package-head">
+              <div>
+                <h3 class="package-name">{{ pkg.name }}</h3>
+                <p class="package-desc">{{ pkg.description }}</p>
+              </div>
+              <span v-if="isCurrentPlan(pkg)" class="package-badge">Current</span>
+              <span v-else-if="pkg.recommended" class="package-badge package-badge-rec">Popular</span>
+            </div>
+            <p class="package-price">{{ pkg.price_label }}</p>
+            <ul class="package-features">
+              <li v-for="(feat, i) in pkg.features" :key="i">{{ feat }}</li>
+            </ul>
+            <button
+              v-if="pkg.contact_only"
+              type="button"
+              class="btn btn-secondary package-btn"
+              @click="onPackageAction(pkg)"
+            >
+              {{ contactLabel }}
+            </button>
+            <button
+              v-else-if="pkg.id === 'monthly' && !isCurrentPlan(pkg) && !pendingOrder"
+              type="button"
+              class="btn btn-primary package-btn"
+              :disabled="paying"
+              @click="onPackageAction(pkg)"
+            >
+              {{ paying ? 'Please wait…' : subscribeLabel }}
+            </button>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Signal types -->
+      <section v-if="activeSignalLabels.length" class="tg-card">
+        <div class="card-head">
+          <h2 class="card-label">Your signal types</h2>
+        </div>
+        <div class="type-chips">
+          <span v-for="label in activeSignalLabels" :key="label" class="type-chip">{{ label }}</span>
+        </div>
+        <p class="card-hint">
+          Change types in the bot: <code>/signaltypes</code> or on the web dashboard.
+        </p>
+      </section>
+
+      <!-- Tier usage -->
+      <section v-if="tierInfo" class="tg-card">
+        <div class="card-head">
+          <h2 class="card-label">Plan usage</h2>
+          <span class="chip chip-muted">{{ tierInfo.limits?.plan }}</span>
+        </div>
+        <ul class="usage-bars">
+          <li>
+            <div class="usage-label">
+              <span>Signals</span>
+              <span>{{ tierInfo.usage?.signals_received ?? 0 }} / {{ tierInfo.limits?.max_signals_per_period }}</span>
+            </div>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                :style="{ width: usagePct(tierInfo.usage?.signals_received, tierInfo.limits?.max_signals_per_period) + '%' }"
+              />
+            </div>
+          </li>
+          <li>
+            <div class="usage-label">
+              <span>Long trades</span>
+              <span>{{ tierInfo.usage?.long_trades ?? 0 }} / {{ tierInfo.limits?.max_long_trades }}</span>
+            </div>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                :style="{ width: usagePct(tierInfo.usage?.long_trades, tierInfo.limits?.max_long_trades) + '%' }"
+              />
+            </div>
+          </li>
+          <li>
+            <div class="usage-label">
+              <span>Short trades</span>
+              <span>{{ tierInfo.usage?.short_trades ?? 0 }} / {{ tierInfo.limits?.max_short_trades }}</span>
+            </div>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                :style="{ width: usagePct(tierInfo.usage?.short_trades, tierInfo.limits?.max_short_trades) + '%' }"
+              />
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Payment pending -->
+      <section v-if="pendingOrder" class="tg-card">
+        <div class="card-head">
+          <h2 class="card-label">Complete payment</h2>
+          <span class="chip chip-warn">Pending</span>
+        </div>
+        <p class="ref-line">
+          Ref <code>{{ pendingOrder.merchant_trade_no }}</code>
+        </p>
+        <ol v-if="instructions?.step1" class="steps">
           <li v-if="instructions.step1">{{ instructions.step1 }}</li>
           <li v-if="instructions.step2">{{ instructions.step2 }}</li>
           <li v-if="instructions.step3">{{ instructions.step3 }}</li>
@@ -280,12 +495,11 @@ onMounted(async () => {
         </button>
         <label class="field">
           <span class="field-label">Transaction ID</span>
-          <span class="field-hint">After sending USDT on Binance</span>
           <input
             v-model="txRef"
             type="text"
             class="field-input"
-            placeholder="Tx hash or order ID"
+            placeholder="Paste after sending USDT"
             autocomplete="off"
           />
         </label>
@@ -294,548 +508,408 @@ onMounted(async () => {
         </button>
       </section>
 
-      <!-- Performance snapshot -->
-      <section class="corp-card">
-        <div class="card-head">
-          <h2 class="card-title">Today&apos;s performance</h2>
-        </div>
-        <div class="metric-grid metric-grid-3">
-          <div class="metric">
-            <span class="metric-label">Trades</span>
-            <span class="metric-value">{{ dailyStats?.trade_count ?? 0 }}</span>
+      <!-- Today -->
+      <section class="tg-card">
+        <h2 class="card-label solo">Today</h2>
+        <div class="stat-row stat-row-3">
+          <div class="stat">
+            <span class="stat-k">Trades</span>
+            <span class="stat-v">{{ dailyStats?.trade_count ?? 0 }}</span>
           </div>
-          <div class="metric">
-            <span class="metric-label">Net P/L</span>
-            <span class="metric-value" :class="plClass(netProfit)">
+          <div class="stat">
+            <span class="stat-k">Net P/L</span>
+            <span class="stat-v" :class="plClass(netProfit)">
               {{ netProfit != null ? (netProfit >= 0 ? '+' : '') + '$' + netProfit.toFixed(2) : '—' }}
             </span>
           </div>
-          <div class="metric">
-            <span class="metric-label">Closed (all time)</span>
-            <span class="metric-value">{{ closedCount }}</span>
+          <div class="stat">
+            <span class="stat-k">Closed</span>
+            <span class="stat-v">{{ closedCount }}</span>
           </div>
         </div>
       </section>
 
       <!-- Positions -->
-      <section class="corp-card">
+      <section class="tg-card">
         <div class="card-head">
-          <h2 class="card-title">Open positions</h2>
-          <span class="count-badge">{{ positions.length }}</span>
+          <h2 class="card-label">Open positions</h2>
+          <span class="count">{{ positions.length }}</span>
         </div>
-        <div v-if="!positions.length" class="empty-state">
-          <p>No open positions on your connected account.</p>
-        </div>
-        <div v-else class="data-table">
-          <div class="data-row data-head">
-            <span>Instrument</span>
-            <span>Side</span>
-            <span class="align-right">P/L</span>
-          </div>
-          <div v-for="p in positions" :key="p.id || p.symbol + p.type" class="data-row">
-            <span class="cell-primary">{{ p.symbol }}</span>
-            <span class="side-tag" :class="p.type === 'BUY' ? 'buy' : 'sell'">{{ p.type }}</span>
-            <span class="align-right" :class="plClass(p.profit)">
-              ${{ Number(p.profit || 0).toFixed(2) }}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Trade history -->
-      <section class="corp-card">
-        <div class="card-head">
-          <h2 class="card-title">Trade history</h2>
-          <span class="count-badge">{{ trades.length }}</span>
-        </div>
-        <div v-if="!trades.length" class="empty-state">
-          <p>No trades recorded yet. Connect a broker and enable automation in the bot.</p>
-        </div>
-        <ul v-else class="trade-list">
-          <li v-for="t in trades" :key="t.id" class="trade-item">
-            <div class="trade-item-top">
-              <div>
-                <span class="cell-primary">{{ t.symbol }}</span>
-                <span class="side-tag" :class="t.type === 'BUY' ? 'buy' : 'sell'">{{ t.type }}</span>
-              </div>
-              <span class="status-tag" :class="t.status?.toLowerCase()">{{ t.status }}</span>
+        <p v-if="!positions.length" class="empty">No open positions.</p>
+        <ul v-else class="pos-list">
+          <li v-for="p in positions" :key="p.id || p.symbol + p.type" class="pos-item">
+            <div>
+              <strong>{{ p.symbol }}</strong>
+              <span class="side" :class="p.type === 'BUY' ? 'buy' : 'sell'">{{ p.type }}</span>
             </div>
-            <div class="trade-item-meta">
-              <span>Entry {{ Number(t.entry_price).toFixed(5) }}</span>
-              <span>{{ fmtTime(t.created_at) }}</span>
-            </div>
-            <div class="trade-item-foot">
-              <span :class="plClass(t.profit)">P/L {{ fmtProfit(t) }}</span>
-              <span v-if="t.closure_reason" class="closure">{{ t.closure_reason }}</span>
-            </div>
+            <span :class="plClass(p.profit)">${{ Number(p.profit || 0).toFixed(2) }}</span>
           </li>
         </ul>
       </section>
 
-      <p v-if="error" class="inline-error">{{ error }}</p>
+      <!-- Trades -->
+      <section class="tg-card">
+        <div class="card-head">
+          <h2 class="card-label">Recent trades</h2>
+          <span class="count">{{ trades.length }}</span>
+        </div>
+        <p v-if="!trades.length" class="empty">No trades yet. Connect a broker and use /autostart in the bot.</p>
+        <ul v-else class="trade-list">
+          <li v-for="t in visibleTrades" :key="t.id" class="trade-item">
+            <div class="trade-top">
+              <div>
+                <strong>{{ t.symbol }}</strong>
+                <span class="side" :class="t.type === 'BUY' ? 'buy' : 'sell'">{{ t.type }}</span>
+              </div>
+              <span class="status">{{ t.status }}</span>
+            </div>
+            <p class="trade-meta">{{ fmtTime(t.created_at) }} · {{ Number(t.entry_price).toFixed(5) }}</p>
+            <p class="trade-pl" :class="plClass(t.profit)">P/L {{ fmtProfit(t) }}</p>
+          </li>
+        </ul>
+        <button
+          v-if="trades.length > 5"
+          type="button"
+          class="btn-text"
+          @click="showAllTrades = !showAllTrades"
+        >
+          {{ showAllTrades ? 'Show less' : `Show all ${trades.length}` }}
+        </button>
+      </section>
+
+      <!-- Bot tips -->
+      <section class="tg-card tg-card-dim">
+        <h2 class="card-label solo">In Telegram</h2>
+        <ul class="cmd-list">
+          <li><code>/signaltypes</code> — forex, indexes, crypto</li>
+          <li><code>/pairs</code> — choose symbols</li>
+          <li><code>/autostart</code> — enable automation</li>
+          <li><code>/balance</code> — account balance</li>
+        </ul>
+      </section>
+
+      <p v-if="error" class="inline-err">{{ error }}</p>
     </main>
 
-    <footer class="corp-footer">
-      <p>Market Mamba · Controlled automation · Not a broker</p>
-      <p class="corp-footer-sub">Forex trading involves substantial risk. USDT billing via Binance only.</p>
+    <footer class="tg-footer">
+      <p>Not a broker · USDT via Binance only</p>
+      <p class="tg-footer-sub">Forex trading involves substantial risk.</p>
     </footer>
   </div>
 </template>
 
 <style scoped>
 .mini-app {
-  --corp-bg: #0c1117;
-  --corp-surface: #151b26;
-  --corp-surface-2: #1c2433;
-  --corp-border: #2a3548;
-  --corp-border-light: #3d4d66;
-  --corp-text: #f1f5f9;
-  --corp-text-soft: #cbd5e1;
-  --corp-muted: #94a3b8;
-  --corp-accent: #10b981;
-  --corp-accent-dim: #059669;
-  --corp-accent-soft: rgba(16, 185, 129, 0.12);
-  --corp-warn: #f59e0b;
-  --corp-warn-soft: rgba(245, 158, 11, 0.12);
-  --corp-danger: #f87171;
-  --corp-danger-soft: rgba(248, 113, 113, 0.1);
+  --mm-bg: #000000;
+  --mm-surface: #0a0a0a;
+  --mm-raised: #111111;
+  --mm-border: #1e1e1e;
+  --mm-text: #f3f4f6;
+  --mm-muted: #9ca3af;
+  --mm-brand: #3dff7a;
+  --mm-brand-soft: rgba(61, 255, 122, 0.12);
+  --mm-on-brand: #041a0c;
+  --mm-warn: #e5b84a;
+  --mm-warn-soft: rgba(229, 184, 74, 0.12);
+  --mm-loss: #f87171;
 
-  max-width: 520px;
+  max-width: 100%;
   margin: 0 auto;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--corp-bg);
-  color: var(--corp-text);
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--mm-bg);
+  color: var(--mm-text);
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
-.corp-header {
+.tg-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  padding-top: max(1rem, env(safe-area-inset-top));
-  background: var(--corp-surface);
-  border-bottom: 1px solid var(--corp-border);
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  padding-top: max(0.85rem, env(safe-area-inset-top));
+  background: var(--mm-surface);
+  border-bottom: 1px solid var(--mm-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.corp-header-main {
+.tg-header-main {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.65rem;
   min-width: 0;
 }
 
-.corp-logo {
-  width: 40px !important;
-  height: 40px !important;
+.tg-logo {
+  width: 36px !important;
+  height: 36px !important;
   flex-shrink: 0;
 }
 
-.corp-eyebrow {
+.tg-eyebrow {
   display: block;
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--corp-muted);
+  color: var(--mm-muted);
 }
 
-.corp-title {
-  margin: 0.1rem 0 0;
-  font-size: 1.125rem;
+.tg-title {
+  margin: 0;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
-.status-pill {
+.tg-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   flex-shrink: 0;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+}
+
+.icon-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--mm-border);
+  background: var(--mm-raised);
+  color: var(--mm-text);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+}
+
+.status-pill {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 0.35rem 0.65rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 999px;
-  border: 1px solid var(--corp-border);
+  border: 1px solid var(--mm-border);
 }
 
-.status-active {
-  color: var(--corp-accent);
-  background: var(--corp-accent-soft);
-  border-color: rgba(16, 185, 129, 0.35);
+.status-pill.on {
+  color: var(--mm-brand);
+  background: var(--mm-brand-soft);
+  border-color: rgba(61, 255, 122, 0.35);
 }
 
-.status-pending {
-  color: var(--corp-warn);
-  background: var(--corp-warn-soft);
-  border-color: rgba(245, 158, 11, 0.35);
+.status-pill.off {
+  color: var(--mm-warn);
+  background: var(--mm-warn-soft);
+  border-color: rgba(229, 184, 74, 0.35);
 }
 
-.corp-main {
+.tg-main {
   flex: 1;
-  padding: 1.25rem;
-  padding-bottom: 0.5rem;
+  padding: 0.85rem 1rem 0.5rem;
 }
 
-.corp-tagline {
-  margin: 0 0 1.25rem;
-  font-size: 0.875rem;
-  line-height: 1.55;
-  color: var(--corp-text-soft);
+.tg-lead {
+  margin: 0 0 0.85rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--mm-muted);
 }
 
-.corp-card {
-  background: var(--corp-surface);
-  border: 1px solid var(--corp-border);
+.quick-row {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.25rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.quick-row::-webkit-scrollbar {
+  display: none;
+}
+
+.quick-chip {
+  flex-shrink: 0;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--mm-brand);
+  background: var(--mm-brand-soft);
+  color: var(--mm-brand);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.quick-chip-muted {
+  border-color: var(--mm-border);
+  background: var(--mm-raised);
+  color: var(--mm-muted);
+}
+
+.tg-card {
+  background: var(--mm-surface);
+  border: 1px solid var(--mm-border);
   border-radius: 12px;
-  padding: 1.15rem 1.25rem;
-  margin-bottom: 1rem;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
 }
 
-.corp-card-highlight {
-  border-color: var(--corp-border-light);
-  background: linear-gradient(180deg, var(--corp-surface-2) 0%, var(--corp-surface) 100%);
+.tg-card-accent {
+  border-top: 2px solid var(--mm-brand);
+}
+
+.tg-card-dim {
+  background: var(--mm-raised);
 }
 
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
 }
 
-.card-title {
+.card-label {
   margin: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--corp-muted);
+  color: var(--mm-muted);
 }
 
-.plan-chip {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.2rem 0.55rem;
+.card-label.solo {
+  margin-bottom: 0.75rem;
+}
+
+.chip {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
   border-radius: 6px;
-  background: var(--corp-accent-soft);
-  color: var(--corp-accent);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: var(--mm-brand-soft);
+  color: var(--mm-brand);
+  border: 1px solid rgba(61, 255, 122, 0.25);
 }
 
-.plan-chip-warn {
-  background: var(--corp-warn-soft);
-  color: var(--corp-warn);
-  border-color: rgba(245, 158, 11, 0.3);
+.chip-muted {
+  background: var(--mm-raised);
+  color: var(--mm-muted);
+  border-color: var(--mm-border);
 }
 
-.metric-grid {
+.chip-warn {
+  background: var(--mm-warn-soft);
+  color: var(--mm-warn);
+  border-color: rgba(229, 184, 74, 0.3);
+}
+
+.stat-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem 1rem;
-  margin-bottom: 1rem;
+  gap: 0.65rem 0.75rem;
+  margin-bottom: 0.85rem;
 }
 
-.metric-grid-3 {
+.stat-row-3 {
   grid-template-columns: repeat(3, 1fr);
   margin-bottom: 0;
 }
 
-@media (max-width: 380px) {
-  .metric-grid-3 {
+@media (max-width: 360px) {
+  .stat-row-3 {
     grid-template-columns: 1fr;
   }
 }
 
-.metric-label {
+.stat-k {
   display: block;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--corp-muted);
-  margin-bottom: 0.2rem;
+  font-size: 0.65rem;
+  color: var(--mm-muted);
+  margin-bottom: 0.1rem;
 }
 
-.metric-value {
-  font-size: 0.95rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--corp-text);
-}
-
-.alert {
-  margin: 0 0 1rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  line-height: 1.45;
-}
-
-.alert-ok {
-  background: var(--corp-accent-soft);
-  color: #6ee7b7;
-  border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.alert-warn {
-  background: var(--corp-warn-soft);
-  color: #fcd34d;
-  border: 1px solid rgba(245, 158, 11, 0.25);
-}
-
-.pricing-block {
-  padding: 0.85rem 0;
-  border-top: 1px solid var(--corp-border);
-  border-bottom: 1px solid var(--corp-border);
-  margin-bottom: 1rem;
-}
-
-.pricing-lead {
-  margin: 0 0 0.35rem;
-  font-size: 0.875rem;
-  color: var(--corp-text-soft);
-}
-
-.pricing-note {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--corp-muted);
-}
-
-.btn-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.btn {
-  width: 100%;
-  min-height: 48px;
-  padding: 0.65rem 1rem;
-  border-radius: 8px;
+.stat-v {
   font-size: 0.9rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
-}
-
-.btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  border: none;
-  background: var(--corp-accent);
-  color: #042f1e;
-}
-
-.btn-primary:not(:disabled):active {
-  background: var(--corp-accent-dim);
-}
-
-.btn-secondary {
-  border: 1px solid var(--corp-border-light);
-  background: transparent;
-  color: var(--corp-text);
-}
-
-.btn-ghost {
-  border: none;
-  background: transparent;
-  color: var(--corp-muted);
-  min-height: 40px;
-  font-weight: 500;
-}
-
-.detail-list {
-  margin: 0 0 1rem;
-}
-
-.detail-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.5rem 1rem;
-  font-size: 0.85rem;
-}
-
-.detail-row dt {
-  color: var(--corp-muted);
-  font-weight: 500;
-}
-
-.detail-row dd {
-  margin: 0;
-  text-align: right;
-}
-
-.detail-row code {
-  font-size: 0.8rem;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  background: var(--corp-bg);
-  border: 1px solid var(--corp-border);
-}
-
-.steps-list {
-  margin: 0 0 1rem;
-  padding-left: 1.2rem;
-  font-size: 0.85rem;
-  color: var(--corp-text-soft);
-  line-height: 1.55;
-}
-
-.field {
-  display: block;
-  margin-bottom: 0.75rem;
-}
-
-.field-label {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--corp-text-soft);
-}
-
-.field-hint {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--corp-muted);
-  margin-bottom: 0.35rem;
-}
-
-.field-input {
-  width: 100%;
-  padding: 0.7rem 0.85rem;
-  border-radius: 8px;
-  border: 1px solid var(--corp-border);
-  background: var(--corp-bg);
-  color: var(--corp-text);
-  font-size: 0.9rem;
-  font-family: inherit;
-}
-
-.field-input:focus {
-  outline: none;
-  border-color: var(--corp-accent);
-  box-shadow: 0 0 0 2px var(--corp-accent-soft);
-}
-
-.count-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.15rem 0.5rem;
-  border-radius: 6px;
-  background: var(--corp-bg);
-  border: 1px solid var(--corp-border);
-  color: var(--corp-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.empty-state {
-  padding: 1.25rem 0.5rem;
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--corp-muted);
-}
-
-.empty-state p {
-  margin: 0;
-}
-
-.data-table {
-  border: 1px solid var(--corp-border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.data-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-  padding: 0.65rem 0.85rem;
-  font-size: 0.85rem;
-  border-bottom: 1px solid var(--corp-border);
-}
-
-.data-row:last-child {
-  border-bottom: none;
-}
-
-.data-head {
-  background: var(--corp-bg);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--corp-muted);
-}
-
-.cell-primary {
-  font-weight: 600;
-  color: var(--corp-text);
-}
-
-.side-tag {
-  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 0.12rem 0.4rem;
-  border-radius: 4px;
-}
-
-.side-tag.buy {
-  color: #6ee7b7;
-  background: var(--corp-accent-soft);
-}
-
-.side-tag.sell {
-  color: var(--corp-muted);
-  background: var(--corp-bg);
-  border: 1px solid var(--corp-border);
-}
-
-.align-right {
-  text-align: right;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
 }
 
-.pos {
-  color: #6ee7b7;
+.stat-v-sm {
+  font-size: 0.8rem;
 }
 
-.neg {
-  color: var(--corp-danger);
+.banner {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
 }
 
-.trade-list {
+.banner-ok {
+  background: var(--mm-brand-soft);
+  color: var(--mm-brand);
+  border: 1px solid rgba(61, 255, 122, 0.2);
+}
+
+.banner-warn {
+  background: var(--mm-warn-soft);
+  color: var(--mm-warn);
+  border: 1px solid rgba(229, 184, 74, 0.25);
+}
+
+.billing-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--mm-muted);
+}
+
+.packages-note {
+  margin-bottom: 0.85rem;
+}
+
+.package-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 360px;
-  overflow-y: auto;
+  display: grid;
+  gap: 0.65rem;
 }
 
-.trade-item {
-  padding: 0.85rem 0;
-  border-bottom: 1px solid var(--corp-border);
+.package-card {
+  padding: 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--mm-border);
+  background: var(--mm-raised);
 }
 
-.trade-item:last-child {
-  border-bottom: none;
+.package-card.recommended {
+  border-color: rgba(61, 255, 122, 0.35);
 }
 
-.trade-item-top {
+.package-card.current {
+  border-color: var(--mm-brand);
+  box-shadow: 0 0 0 1px var(--mm-brand-soft);
+}
+
+.package-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -843,52 +917,323 @@ onMounted(async () => {
   margin-bottom: 0.35rem;
 }
 
-.trade-item-top > div {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-wrap: wrap;
+.package-name {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.status-tag {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+.package-desc {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--mm-muted);
+}
+
+.package-badge {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  font-weight: 700;
   text-transform: uppercase;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-  background: var(--corp-bg);
-  border: 1px solid var(--corp-border);
-  color: var(--corp-muted);
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: var(--mm-brand-soft);
+  color: var(--mm-brand);
+  border: 1px solid rgba(61, 255, 122, 0.25);
 }
 
-.status-tag.open {
-  color: #6ee7b7;
-  border-color: rgba(16, 185, 129, 0.3);
+.package-badge-rec {
+  background: var(--mm-raised);
+  color: var(--mm-muted);
+  border-color: var(--mm-border);
 }
 
-.trade-item-meta {
+.package-price {
+  margin: 0 0 0.55rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--mm-brand);
+  font-variant-numeric: tabular-nums;
+}
+
+.package-features {
+  margin: 0 0 0.65rem;
+  padding-left: 1rem;
+  font-size: 0.75rem;
+  color: var(--mm-muted);
+  line-height: 1.55;
+}
+
+.package-btn {
+  min-height: 42px;
+  font-size: 0.8125rem;
+}
+
+.btn-row {
+  margin-top: 0.85rem;
+}
+
+.btn {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--mm-brand), #32d96a);
+  color: var(--mm-on-brand);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--mm-border);
+  color: var(--mm-text);
+  margin-bottom: 0.65rem;
+}
+
+.btn-text {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: none;
+  background: none;
+  color: var(--mm-brand);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.type-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 1rem;
-  font-size: 0.78rem;
-  color: var(--corp-muted);
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.type-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: var(--mm-brand-soft);
+  color: var(--mm-brand);
+  border: 1px solid rgba(61, 255, 122, 0.25);
+}
+
+.card-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--mm-muted);
+}
+
+.card-hint code {
+  font-size: 0.7rem;
+  color: var(--mm-brand);
+  background: var(--mm-brand-soft);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+.usage-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.usage-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--mm-muted);
   margin-bottom: 0.35rem;
 }
 
-.trade-item-foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+.bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--mm-raised);
+  overflow: hidden;
 }
 
-.closure {
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--mm-brand);
+  transition: width 0.3s ease;
+}
+
+.ref-line {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--mm-muted);
+}
+
+.ref-line code {
   font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--corp-muted);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--mm-raised);
+}
+
+.steps {
+  margin: 0 0 0.85rem;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  color: var(--mm-muted);
+  line-height: 1.5;
+}
+
+.field {
+  display: block;
+  margin-bottom: 0.65rem;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: var(--mm-muted);
+}
+
+.field-input {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--mm-border);
+  background: var(--mm-bg);
+  color: var(--mm-text);
+  font-size: 16px;
+  font-family: inherit;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: var(--mm-brand);
+  box-shadow: 0 0 0 2px var(--mm-brand-soft);
+}
+
+.count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--mm-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--mm-muted);
+  text-align: center;
+  padding: 0.5rem 0;
+}
+
+.pos-list,
+.trade-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pos-item,
+.trade-item {
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--mm-border);
+}
+
+.pos-item:last-child,
+.trade-item:last-child {
+  border-bottom: none;
+}
+
+.pos-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.side {
+  margin-left: 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.side.buy {
+  color: var(--mm-brand);
+  background: var(--mm-brand-soft);
+}
+
+.side.sell {
+  color: var(--mm-muted);
+  background: var(--mm-raised);
+}
+
+.trade-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.status {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mm-muted);
+}
+
+.trade-meta {
+  margin: 0 0 0.2rem;
+  font-size: 0.75rem;
+  color: var(--mm-muted);
+}
+
+.trade-pl {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.pos {
+  color: var(--mm-brand);
+}
+
+.neg {
+  color: var(--mm-loss);
+}
+
+.cmd-list {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.8125rem;
+  color: var(--mm-muted);
+  line-height: 1.65;
+}
+
+.cmd-list code {
+  color: var(--mm-brand);
+  font-size: 0.75rem;
 }
 
 .state-panel {
@@ -897,34 +1242,33 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3rem 1.5rem;
+  padding: 2.5rem 1.25rem;
   text-align: center;
 }
 
 .state-title {
   margin: 1rem 0 0.35rem;
-  font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .state-sub {
-  margin: 0;
+  margin: 0 0 1rem;
   font-size: 0.875rem;
-  color: var(--corp-muted);
-  max-width: 280px;
+  color: var(--mm-muted);
+  max-width: 260px;
 }
 
 .state-error .state-sub {
-  color: var(--corp-danger);
+  color: var(--mm-loss);
 }
 
 .spinner {
-  width: 36px;
-  height: 36px;
-  border: 2px solid var(--corp-border);
-  border-top-color: var(--corp-accent);
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--mm-border);
+  border-top-color: var(--mm-brand);
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin 0.65s linear infinite;
 }
 
 @keyframes spin {
@@ -933,33 +1277,31 @@ onMounted(async () => {
   }
 }
 
-.inline-error {
-  margin: 0;
-  padding: 0.75rem;
-  font-size: 0.85rem;
-  color: var(--corp-danger);
-  background: var(--corp-danger-soft);
+.inline-err {
+  margin: 0.5rem 0 0;
+  padding: 0.65rem;
+  font-size: 0.8125rem;
+  color: var(--mm-loss);
+  background: rgba(248, 113, 113, 0.1);
   border-radius: 8px;
   border: 1px solid rgba(248, 113, 113, 0.25);
 }
 
-.corp-footer {
-  padding: 1.25rem;
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
-  border-top: 1px solid var(--corp-border);
+.tg-footer {
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--mm-border);
   text-align: center;
 }
 
-.corp-footer p {
+.tg-footer p {
   margin: 0;
-  font-size: 0.72rem;
-  color: var(--corp-muted);
-  letter-spacing: 0.02em;
+  font-size: 0.6875rem;
+  color: var(--mm-muted);
 }
 
-.corp-footer-sub {
-  margin-top: 0.35rem !important;
-  font-size: 0.68rem !important;
+.tg-footer-sub {
+  margin-top: 0.25rem !important;
   opacity: 0.85;
 }
 </style>

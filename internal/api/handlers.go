@@ -56,6 +56,14 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"binance_pay_enabled":    s.payments != nil && s.cfg.Payments.BinancePayAPIKey != "",
 		"signal_broadcast":       s.cfg.App.SignalBroadcastEnabled,
 		"signal_symbols":         s.cfg.SignalSymbols(),
+		"packages":               tier.PublicPackages(s.cfg.Payments.SubscriptionPriceUSDT, s.cfg.App.FreeTrialDays),
+		"pricing": map[string]interface{}{
+			"trial_days":          s.cfg.App.FreeTrialDays,
+			"price_usdt":          s.cfg.Payments.SubscriptionPriceUSDT,
+			"billing_period_days": s.cfg.Payments.SubscriptionDays,
+			"currency":            "USDT",
+			"payment_note":        "USDT via Binance only — no cards or Stripe.",
+		},
 	}
 	if stats, err := s.storage.GetUserStats(); err == nil && stats != nil {
 		payload["total_trades"] = stats.TotalTrades
