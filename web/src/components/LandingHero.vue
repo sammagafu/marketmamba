@@ -177,7 +177,8 @@ onUnmounted(() => {
             </p>
 
             <p v-if="apiOffline" class="api-offline">
-              Offline — <strong>{{ apiTarget }}</strong>
+              API unreachable at <strong>{{ apiTarget }}</strong> — start the Go server
+              (<code>go run cmd/server/main.go</code>) or check the Vite proxy.
             </p>
 
             <div class="portal-slot">

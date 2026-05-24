@@ -59,12 +59,12 @@ import {
     </div>
 
     <p class="section-eyebrow sources-label">Platform</p>
-    <div class="how-sources">
-      <article v-for="src in SIGNAL_SOURCES" :key="src.title" class="how-source">
-        <h3 class="how-source-title">{{ src.title }}</h3>
-        <p class="how-source-body">{{ src.body }}</p>
-      </article>
-    </div>
+    <ul class="how-sources">
+      <li v-for="src in SIGNAL_SOURCES" :key="src.title" class="how-source">
+        <strong class="how-source-title">{{ src.title }}</strong>
+        <span class="how-source-body">{{ src.body }}</span>
+      </li>
+    </ul>
 
     <p class="how-disclaimer">{{ RISK_DISCLAIMER }}</p>
   </section>
@@ -82,7 +82,7 @@ import {
 }
 
 .how-head {
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
 }
 
 .how-title {
@@ -96,15 +96,15 @@ import {
 
 .pipeline-label,
 .sources-label {
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .how-pipeline {
   list-style: none;
-  margin: 0 0 3rem;
+  margin: 0 0 2.5rem;
   padding: 0;
   display: grid;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 @media (min-width: 640px) {
@@ -121,9 +121,9 @@ import {
 
 .how-pipe-card {
   display: flex;
-  gap: 0.85rem;
-  padding: 1.15rem 1.2rem;
-  border-radius: 12px;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   min-width: 0;
@@ -133,39 +133,40 @@ import {
   flex-shrink: 0;
   font-size: 0.6875rem;
   font-weight: 800;
-  color: var(--win);
-  letter-spacing: 0.08em;
+  color: var(--brand);
+  letter-spacing: 0.06em;
+  padding-top: 0.15rem;
 }
 
 .how-pipe-title {
-  margin: 0 0 0.4rem;
-  font-size: 0.9375rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
   font-weight: 700;
 }
 
 .how-pipe-body {
   margin: 0;
   font-size: 0.8125rem;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--muted);
 }
 
 .how-columns {
   display: grid;
-  gap: 2.5rem;
-  margin-bottom: 2.5rem;
+  gap: 2rem;
+  margin-bottom: 2rem;
 }
 
 @media (min-width: 900px) {
   .how-columns {
     grid-template-columns: 1fr 1fr;
-    gap: 3rem;
+    gap: 2.5rem;
   }
 }
 
 .how-block-title {
-  margin: 0 0 1.15rem;
-  font-size: 1.0625rem;
+  margin: 0 0 1rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -174,30 +175,30 @@ import {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .how-card {
-  padding: 1rem 1.1rem;
-  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
 }
 
 .how-tag {
   display: inline-block;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.35rem;
   font-size: 0.625rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--win-bright);
+  color: var(--muted);
 }
 
 .how-card-name {
   display: block;
-  font-size: 0.9rem;
-  margin-bottom: 0.3rem;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
 }
 
 .how-card-detail {
@@ -213,58 +214,68 @@ import {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.35rem 0.75rem;
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.25rem;
 }
 
 .how-risk-value {
   font-size: 0.875rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--brand);
   font-variant-numeric: tabular-nums;
 }
 
 .how-sources {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
   display: grid;
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-@media (min-width: 640px) {
-  .how-sources {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .how-source {
-  padding: 1.15rem 1.2rem;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
   background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.how-source:last-child {
+  border-bottom: none;
+}
+
+@media (min-width: 768px) {
+  .how-source {
+    grid-template-columns: minmax(9rem, 34%) 1fr;
+    gap: 1rem;
+    align-items: baseline;
+  }
 }
 
 .how-source-title {
-  margin: 0 0 0.55rem;
-  font-size: 0.9375rem;
-  font-weight: 700;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--text);
   line-height: 1.35;
 }
 
 .how-source-body {
-  margin: 0;
   font-size: 0.8125rem;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--muted);
 }
 
 .how-disclaimer {
   margin: 0;
-  padding: 1.15rem 1.2rem;
+  padding: 1rem 1.1rem;
   font-size: 0.75rem;
   line-height: 1.55;
   color: var(--muted);
   border-radius: 10px;
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 </style>

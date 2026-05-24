@@ -11,6 +11,7 @@ import UserDashboard from './components/UserDashboard.vue'
 import BrandLogo from './components/BrandLogo.vue'
 import TradingPairs from './components/TradingPairs.vue'
 import BrokerConnectWizard from './components/BrokerConnectWizard.vue'
+import FilterStack from './components/FilterStack.vue'
 import AppFooter from './components/AppFooter.vue'
 
 const loggedIn = ref(false)
@@ -208,7 +209,9 @@ async function adminActivate() {
 async function loadConfig() {
   try {
     const res = await fetch(`${API}/config`)
-    if (!res.ok) throw new Error('API error')
+    if (!res.ok) {
+      throw new Error(res.status === 500 ? 'Server error — is the API running on port 8090?' : `API ${res.status}`)
+    }
     config.value = await res.json()
     apiOffline.value = false
   } catch {
@@ -331,6 +334,8 @@ onMounted(async () => {
       :can-trade="canTrade && !isBlocked"
       @message="(m) => { message = m.text; messageOk = m.ok }"
     />
+
+    <FilterStack :symbols="config?.signal_symbols || ['EURUSD', 'BTCUSD']" />
 
     <BrokerConnectWizard
       id="connect"

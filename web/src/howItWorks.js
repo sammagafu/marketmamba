@@ -33,24 +33,28 @@ export const TRADE_PIPELINE = [
 export const INDICATORS = [
   {
     tag: 'Trend',
+    tone: 'trend',
     name: 'EMA 20 · 50 · 200',
     detail:
       'Stacked averages define trend direction and pullback zones near EMA 20 or 50.',
   },
   {
     tag: 'Momentum',
+    tone: 'momentum',
     name: 'RSI',
     detail:
       'Filters exhausted moves by avoiding extreme overbought and oversold readings.',
   },
   {
     tag: 'Volatility',
+    tone: 'volatility',
     name: 'ATR',
     detail:
       'Skips flat markets; helps set stop distance and take-profit versus your minimum R:R.',
   },
   {
     tag: 'Cost',
+    tone: 'cost',
     name: 'Spread',
     detail:
       'Wide spreads on majors are rejected so execution cost does not erode the edge.',
@@ -91,7 +95,14 @@ export const RISK_CONTROLS = [
   },
 ]
 
+export const SIGNAL_STACK_NOTE =
+  'Every symbol runs through a documented filter stack (spread, ATR, RSI, EMA trend, setup, strength, R:R, risk). Inspect it live on your dashboard under Filter stack.'
+
 export const SIGNAL_SOURCES = [
+  {
+    title: 'Auditable filter stack',
+    body: SIGNAL_STACK_NOTE,
+  },
   {
     title: 'Our signals, not channel copy',
     body:

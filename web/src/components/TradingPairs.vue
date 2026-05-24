@@ -22,6 +22,8 @@ const activeGroupIds = computed(() => {
   return ids
 })
 
+const activeTypeCount = computed(() => activeGroupIds.value.length)
+
 const visibleRows = computed(() => {
   const enabled = new Set(activeGroupIds.value)
   const symToGroup = {}
@@ -35,6 +37,10 @@ const visibleRows = computed(() => {
     return !g || enabled.has(g)
   })
 })
+
+const signalCount = computed(
+  () => visibleRows.value.filter((r) => r.receive_signals).length,
+)
 
 const rowsByGroup = computed(() => {
   const symToGroup = {}
@@ -55,6 +61,14 @@ const rowsByGroup = computed(() => {
   }
   return Object.values(buckets).filter((b) => b.rows.length > 0)
 })
+
+const typeCards = [
+  { id: 'forex', title: 'Forex', hint: 'Majors & crosses', icon: 'FX', accent: 'fx' },
+  { id: 'indexes', title: 'Indexes', hint: 'US 500, NAS, volatility', icon: 'IX', accent: 'ix' },
+  { id: 'crypto', title: 'Bitcoin & crypto', hint: 'BTC/USD, ETH/USD', icon: '₿', accent: 'cr' },
+]
+
+const groupAccent = { forex: 'fx', indexes: 'ix', crypto: 'cr' }
 
 function syncTypesFromGroups() {
   const map = { forex: false, indexes: false, crypto: false }
@@ -124,7 +138,7 @@ async function save() {
       auto_trade: !!p.auto_trade,
     }))
     emit('message', {
-      text: `Saved — types: ${formatTypes()} · signals: ${(data.signal_symbols || []).join(', ') || 'none'}`,
+      text: `Saved — ${formatTypes()} · ${(data.signal_symbols || []).length} pairs with signals`,
       ok: true,
     })
   } catch (e) {
@@ -149,12 +163,6 @@ function enableAllVisible() {
   )
 }
 
-const typeCards = [
-  { id: 'forex', title: 'Forex', hint: 'Majors & crosses', icon: 'FX' },
-  { id: 'indexes', title: 'Indexes', hint: 'US 500, NAS, vol indices', icon: 'IX' },
-  { id: 'crypto', title: 'Bitcoin & crypto', hint: 'BTC/USD, ETH/USD', icon: '₿' },
-]
-
 onMounted(load)
 </script>
 
@@ -165,24 +173,40 @@ onMounted(load)
         <p class="section-eyebrow">Automation scope</p>
         <h2 class="section-title section-title-sm">Signals &amp; pairs</h2>
       </div>
-      <button type="button" class="btn-secondary" :disabled="loading" @click="load">Refresh</button>
+      <button type="button" class="btn-secondary btn-sm" :disabled="loading" @click="load">
+        Refresh
+      </button>
     </div>
 
     <p class="muted pairs-lede">
-      Choose the <strong>types of signals</strong> you want (forex, indexes, bitcoin/crypto), then fine-tune
-      individual pairs for Telegram alerts and <code>/autostart</code>.
+      Pick <strong>forex</strong>, <strong>indexes</strong>, or <strong>bitcoin/crypto</strong>, then choose which
+      symbols get Telegram alerts and auto-trade with <code>/autostart</code>.
     </p>
 
-    <p v-if="loading" class="muted">Loading…</p>
+    <div v-if="loading" class="pairs-loading" aria-busy="true">
+      <div class="skel skel-wide" />
+      <div class="skel-row">
+        <div class="skel skel-card" />
+        <div class="skel skel-card" />
+        <div class="skel skel-card" />
+      </div>
+    </div>
+
     <template v-else>
-      <p class="section-eyebrow types-label">Signal types</p>
+      <div class="pairs-summary" role="status">
+        <span class="summary-chip">{{ activeTypeCount }} type{{ activeTypeCount === 1 ? '' : 's' }} on</span>
+        <span class="summary-chip">{{ visibleRows.length }} pairs visible</span>
+        <span class="summary-chip summary-chip-accent">{{ signalCount }} receiving signals</span>
+      </div>
+
+      <p class="section-eyebrow types-label">1 · Signal types</p>
       <div class="type-grid" role="group" aria-label="Signal asset types">
         <button
           v-for="t in typeCards"
           :key="t.id"
           type="button"
           class="type-card"
-          :class="{ active: signalTypes[t.id], disabled: !canTrade }"
+          :class="[`type-card--${t.accent}`, { active: signalTypes[t.id] }]"
           :disabled="!canTrade"
           :aria-pressed="signalTypes[t.id]"
           @click="toggleType(t.id)"
@@ -192,14 +216,44 @@ onMounted(load)
             <strong class="type-title">{{ t.title }}</strong>
             <span class="type-hint">{{ t.hint }}</span>
           </span>
-          <span class="type-check" aria-hidden="true">{{ signalTypes[t.id] ? 'On' : 'Off' }}</span>
+          <span class="type-pill">{{ signalTypes[t.id] ? 'On' : 'Off' }}</span>
         </button>
       </div>
 
-      <p class="section-eyebrow pairs-label">Pairs in your types</p>
-      <div v-for="bucket in rowsByGroup" :key="bucket.group.id" class="pair-group">
-        <h3 class="pair-group-title">{{ bucket.group.label }}</h3>
-        <div class="pairs-table-wrap">
+      <p class="section-eyebrow pairs-label">2 · Pairs</p>
+
+      <p v-if="!rowsByGroup.length" class="pairs-empty">
+        Enable at least one signal type above to see available pairs.
+      </p>
+
+      <div
+        v-for="bucket in rowsByGroup"
+        :key="bucket.group.id"
+        class="pair-group"
+        :class="`pair-group--${groupAccent[bucket.group.id] || 'fx'}`"
+      >
+        <header class="pair-group-head">
+          <h3 class="pair-group-title">{{ bucket.group.label }}</h3>
+          <span class="pair-group-count">{{ bucket.rows.length }} pairs</span>
+        </header>
+
+        <div class="pair-cards-mobile">
+          <div v-for="row in bucket.rows" :key="row.symbol" class="pair-row-card">
+            <strong class="pair-symbol">{{ row.symbol }}</strong>
+            <div class="pair-toggles">
+              <label class="toggle-pill" :class="{ on: row.receive_signals }">
+                <input v-model="row.receive_signals" type="checkbox" :disabled="!canTrade" />
+                <span>Signals</span>
+              </label>
+              <label class="toggle-pill" :class="{ on: row.auto_trade }">
+                <input v-model="row.auto_trade" type="checkbox" :disabled="!canTrade" />
+                <span>Auto</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="pairs-table-wrap pair-table-desktop table-wrap">
           <table class="pairs-table">
             <thead>
               <tr>
@@ -209,15 +263,11 @@ onMounted(load)
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in bucket.rows" :key="row.symbol">
+              <tr v-for="row in bucket.rows" :key="`t-${row.symbol}`">
                 <td><strong>{{ row.symbol }}</strong></td>
                 <td>
                   <label class="pair-check">
-                    <input
-                      v-model="row.receive_signals"
-                      type="checkbox"
-                      :disabled="!canTrade"
-                    />
+                    <input v-model="row.receive_signals" type="checkbox" :disabled="!canTrade" />
                     <span>Telegram</span>
                   </label>
                 </td>
@@ -237,18 +287,12 @@ onMounted(load)
         <button type="button" class="btn-secondary" :disabled="!canTrade" @click="enableAllVisible">
           Enable all visible
         </button>
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="!canTrade || saving"
-          @click="save"
-        >
+        <button type="button" class="btn-primary" :disabled="!canTrade || saving" @click="save">
           {{ saving ? 'Saving…' : 'Save preferences' }}
         </button>
       </div>
       <p class="muted pairs-hint">
-        Telegram: <code>/signaltypes forex crypto</code> · <code>/pairs EURUSD</code> ·
-        <code>/pairs</code> to view
+        Telegram: <code>/signaltypes forex crypto</code> · <code>/pairs EURUSD</code>
       </p>
     </template>
   </section>
@@ -269,10 +313,35 @@ onMounted(load)
 .pairs-head h2 {
   margin: 0;
 }
+.btn-sm {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8125rem;
+}
 .pairs-lede {
-  margin: 0 0 1.25rem;
+  margin: 0 0 1rem;
   font-size: 0.9rem;
   line-height: 1.55;
+}
+.pairs-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.summary-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.summary-chip-accent {
+  color: var(--brand);
+  border-color: var(--brand-muted);
+  background: var(--brand-soft);
 }
 .types-label,
 .pairs-label {
@@ -280,7 +349,7 @@ onMounted(load)
 }
 .type-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 0.75rem;
   margin-bottom: 1.75rem;
 }
@@ -288,42 +357,54 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.9rem 1rem;
-  border-radius: 12px;
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-raised);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 .type-card:hover:not(:disabled) {
-  border-color: var(--brand);
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
 }
 .type-card.active {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 1px var(--brand), 0 0 16px var(--win-glow);
+  box-shadow: 0 0 20px var(--win-glow);
 }
+.type-card--fx.active { border-color: #3dff7a; }
+.type-card--ix.active { border-color: #5eb3ff; }
+.type-card--cr.active { border-color: #fbbf24; }
 .type-card:disabled {
-  opacity: 0.65;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 .type-icon {
   flex-shrink: 0;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.35rem;
+  height: 2.35rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  font-size: 0.75rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
   font-weight: 800;
-  background: var(--bg);
-  color: var(--win-bright);
   border: 1px solid var(--border);
+  background: var(--bg);
 }
-.type-card.active .type-icon {
-  background: var(--brand);
-  color: var(--on-brand);
+.type-card--fx.active .type-icon {
+  background: rgba(61, 255, 122, 0.15);
+  color: var(--brand);
+  border-color: transparent;
+}
+.type-card--ix.active .type-icon {
+  background: rgba(94, 179, 255, 0.15);
+  color: #5eb3ff;
+  border-color: transparent;
+}
+.type-card--cr.active .type-icon {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
   border-color: transparent;
 }
 .type-body {
@@ -331,44 +412,115 @@ onMounted(load)
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.12rem;
 }
 .type-title {
   font-size: 0.9rem;
   color: var(--text);
 }
 .type-hint {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--muted);
   line-height: 1.35;
 }
-.type-check {
+.type-pill {
   flex-shrink: 0;
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  padding: 0.25rem 0.45rem;
+  border-radius: 6px;
+  background: var(--bg);
   color: var(--muted);
 }
-.type-card.active .type-check {
-  color: var(--brand);
+.type-card.active .type-pill {
+  background: var(--brand);
+  color: var(--on-brand);
 }
 .pair-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.pair-group--fx { border-left: 3px solid #3dff7a; }
+.pair-group--ix { border-left: 3px solid #5eb3ff; }
+.pair-group--cr { border-left: 3px solid #fbbf24; }
+.pair-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 .pair-group-title {
-  margin: 0 0 0.5rem;
-  font-size: 0.875rem;
+  margin: 0;
+  font-size: 0.9375rem;
   font-weight: 700;
+}
+.pair-group-count {
+  font-size: 0.75rem;
   color: var(--muted);
 }
-.pairs-table-wrap {
-  overflow-x: auto;
-  margin-bottom: 0.5rem;
+.pair-cards-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
-.pairs-table {
-  width: 100%;
-  min-width: 280px;
+.pair-table-desktop {
+  display: none;
+}
+@media (min-width: 720px) {
+  .pair-cards-mobile {
+    display: none;
+  }
+  .pair-table-desktop {
+    display: block;
+  }
+}
+.pair-row-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+.pair-symbol {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.pair-toggles {
+  display: flex;
+  gap: 0.4rem;
+}
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.toggle-pill input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-pill.on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 .pair-check {
   display: inline-flex;
@@ -383,14 +535,54 @@ onMounted(load)
   min-height: auto;
   accent-color: var(--brand);
 }
+.pairs-empty {
+  margin: 0 0 1.25rem;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--muted);
+  border-radius: 10px;
+  border: 1px dashed var(--border-strong);
+}
 .pairs-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 .pairs-hint {
   margin: 0.75rem 0 0;
   font-size: 0.8rem;
+}
+.pairs-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.skel {
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    var(--surface) 0%,
+    var(--surface-raised) 50%,
+    var(--surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+.skel-wide {
+  height: 2.5rem;
+}
+.skel-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+.skel-card {
+  height: 4.5rem;
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 </style>
