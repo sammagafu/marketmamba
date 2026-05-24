@@ -15,6 +15,7 @@ import (
 	"forex-bot/internal/pairs"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
+	"forex-bot/internal/tier"
 )
 
 type BrokerResolver func(userID int64) (broker.Broker, error)
@@ -29,6 +30,7 @@ type Coordinator struct {
 	store           *storage.PostgresStorage
 	cfg             *config.Config
 	subs            *subscription.Service
+	tier            *tier.Service
 	validator       *risk.RiskValidator
 	outcomeNotifier feedback.OutcomeNotifier
 	pairSvc         *pairs.Service
@@ -44,6 +46,7 @@ func NewCoordinator(
 	store *storage.PostgresStorage,
 	cfg *config.Config,
 	subs *subscription.Service,
+	tierSvc *tier.Service,
 	v *risk.RiskValidator,
 	resolve BrokerResolver,
 	outcomeNotifier feedback.OutcomeNotifier,
@@ -55,6 +58,7 @@ func NewCoordinator(
 		store:           store,
 		cfg:             cfg,
 		subs:            subs,
+		tier:            tierSvc,
 		validator:       v,
 		outcomeNotifier: outcomeNotifier,
 		pairSvc:         pairSvc,
@@ -133,7 +137,7 @@ func (c *Coordinator) ensureRunner(ctx context.Context, userID int64) {
 		logger.Warn("Coordinator account sync user %d: %v", userID, syncErr)
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	executor := NewTradeExecutor(b, c.store, c.validator, userID, c.outcomeNotifier)
+	executor := NewTradeExecutor(b, c.store, c.validator, userID, provider, c.tier, c.outcomeNotifier)
 	posMonitor := NewPositionMonitor(b, c.store, userID, 5*time.Second)
 	symbols := c.cfg.SignalSymbols()
 	if c.pairSvc != nil {

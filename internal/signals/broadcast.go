@@ -11,6 +11,7 @@ import (
 	"forex-bot/internal/risk"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
+	"forex-bot/internal/tier"
 )
 
 // Notifier delivers trade alerts to one Telegram user (chat_id = telegram_id).
@@ -48,7 +49,7 @@ func FormatMessage(signal *models.TradeSignal) string {
 }
 
 // Broadcast sends a signal to all eligible subscribers (signal must already qualify).
-func Broadcast(store *storage.PostgresStorage, subs *subscription.Service, notifier Notifier, signal *models.TradeSignal) (int, error) {
+func Broadcast(store *storage.PostgresStorage, subs *subscription.Service, tierSvc *tier.Service, notifier Notifier, signal *models.TradeSignal) (int, error) {
 	if signal == nil || notifier == nil {
 		return 0, nil
 	}
@@ -62,9 +63,21 @@ func Broadcast(store *storage.PostgresStorage, subs *subscription.Service, notif
 		if !ok {
 			continue
 		}
+		if tierSvc != nil {
+			ok, msg := tierSvc.CanReceiveSignal(id)
+			if !ok {
+				logger.Debug("Signal skipped user %d: %s", id, msg)
+				continue
+			}
+		}
 		if err := notifier.NotifySignal(id, signal); err != nil {
 			logger.Error("Signal notify user %d: %v", id, err)
 			continue
+		}
+		if tierSvc != nil {
+			if err := tierSvc.RecordSignal(id); err != nil {
+				logger.Warn("Signal usage user %d: %v", id, err)
+			}
 		}
 		sent++
 	}
@@ -72,7 +85,7 @@ func Broadcast(store *storage.PostgresStorage, subs *subscription.Service, notif
 }
 
 // BroadcastDecision sends a sniper decision to eligible subscribers (TAKE only).
-func BroadcastDecision(store *storage.PostgresStorage, subs *subscription.Service, notifier Notifier, d *decision.Decision) (int, error) {
+func BroadcastDecision(store *storage.PostgresStorage, subs *subscription.Service, tierSvc *tier.Service, notifier Notifier, d *decision.Decision) (int, error) {
 	if d == nil || d.Action != decision.ActionTake || d.Signal == nil || notifier == nil {
 		return 0, nil
 	}
@@ -86,9 +99,21 @@ func BroadcastDecision(store *storage.PostgresStorage, subs *subscription.Servic
 		if !ok {
 			continue
 		}
+		if tierSvc != nil {
+			ok, msg := tierSvc.CanReceiveSignal(id)
+			if !ok {
+				logger.Debug("Sniper skipped user %d: %s", id, msg)
+				continue
+			}
+		}
 		if err := notifier.NotifyDecision(id, d); err != nil {
 			logger.Error("Sniper notify user %d: %v", id, err)
 			continue
+		}
+		if tierSvc != nil {
+			if err := tierSvc.RecordSignal(id); err != nil {
+				logger.Warn("Sniper usage user %d: %v", id, err)
+			}
 		}
 		sent++
 	}
@@ -99,6 +124,7 @@ func BroadcastDecision(store *storage.PostgresStorage, subs *subscription.Servic
 type Publisher struct {
 	store       *storage.PostgresStorage
 	subs        *subscription.Service
+	tier        *tier.Service
 	notifier    Notifier
 	validator   *risk.RiskValidator
 	engine      *decision.Engine
@@ -111,6 +137,7 @@ type Publisher struct {
 func NewPublisher(
 	store *storage.PostgresStorage,
 	subs *subscription.Service,
+	tierSvc *tier.Service,
 	notifier Notifier,
 	validator *risk.RiskValidator,
 	engine *decision.Engine,
@@ -129,7 +156,7 @@ func NewPublisher(
 		minStrength = 0.7
 	}
 	return &Publisher{
-		store: store, subs: subs, notifier: notifier, validator: validator,
+		store: store, subs: subs, tier: tierSvc, notifier: notifier, validator: validator,
 		engine: engine, symbols: symbols, interval: interval, minStrength: minStrength,
 		useDecision: useDecision,
 	}
@@ -172,7 +199,7 @@ func (p *Publisher) publishOnce() {
 				logger.Debug("Sniper broadcast skip %s: %s — %s", symbol, d.Action, d.Reason)
 				continue
 			}
-			n, err := BroadcastDecision(p.store, p.subs, p.notifier, d)
+			n, err := BroadcastDecision(p.store, p.subs, p.tier, p.notifier, d)
 			if err != nil {
 				logger.Error("Sniper broadcast %s: %v", symbol, err)
 				continue
@@ -189,7 +216,7 @@ func (p *Publisher) publishOnce() {
 			logger.Debug("Signal broadcast skipped %s: %v", symbol, err)
 			continue
 		}
-		n, err := Broadcast(p.store, p.subs, p.notifier, signal)
+		n, err := Broadcast(p.store, p.subs, p.tier, p.notifier, signal)
 		if err != nil {
 			logger.Error("Signal broadcast %s: %v", symbol, err)
 			continue
@@ -205,6 +232,7 @@ func (p *Publisher) publishOnce() {
 func PublishManual(
 	store *storage.PostgresStorage,
 	subs *subscription.Service,
+	tierSvc *tier.Service,
 	notifier Notifier,
 	validator *risk.RiskValidator,
 	minStrength float64,
@@ -219,5 +247,5 @@ func PublishManual(
 			return 0, err
 		}
 	}
-	return Broadcast(store, subs, notifier, signal)
+	return Broadcast(store, subs, tierSvc, notifier, signal)
 }

@@ -11,26 +11,31 @@ import (
 	"forex-bot/internal/models"
 	"forex-bot/internal/risk"
 	"forex-bot/internal/storage"
+	"forex-bot/internal/tier"
 	"forex-bot/internal/utils"
 )
 
 // TradeExecutor handles automated trade execution
 type TradeExecutor struct {
 	broker          broker.Broker
+	provider        string
 	storage         storage.Storage
 	tradeLog        *TradeLog
 	validator       *risk.RiskValidator
 	outcomeNotifier feedback.OutcomeNotifier
+	tier            *tier.Service
 	userID          int64
 	maxRetries      int
 }
 
-func NewTradeExecutor(b broker.Broker, s storage.Storage, v *risk.RiskValidator, userID int64, notifier feedback.OutcomeNotifier) *TradeExecutor {
+func NewTradeExecutor(b broker.Broker, s storage.Storage, v *risk.RiskValidator, userID int64, provider string, tierSvc *tier.Service, notifier feedback.OutcomeNotifier) *TradeExecutor {
 	te := &TradeExecutor{
 		broker:          b,
+		provider:        provider,
 		storage:         s,
 		validator:       v,
 		outcomeNotifier: notifier,
+		tier:            tierSvc,
 		userID:          userID,
 		maxRetries:      3,
 	}
@@ -90,6 +95,12 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 	// Get daily loss
 	dailyLoss := todayStats.TotalLoss - todayStats.TotalProfit
 
+	if te.tier != nil {
+		if err := te.tier.CanExecuteTrade(te.userID, signal.Type); err != nil {
+			return nil, err
+		}
+	}
+
 	// Validate signal against risk rules
 	if err := te.validator.ValidateTradeSignal(signal, account.Balance, len(openPositions), todayStats.TradeCount, dailyLoss, botState.IsPaused); err != nil {
 		logger.Warn("Signal validation failed for user %d: %v", te.userID, err)
@@ -102,12 +113,18 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 		logger.Error("Failed to calculate lot size: %v", err)
 		return nil, fmt.Errorf("failed to calculate lot size: %w", err)
 	}
+	caps := broker.AdapterCapabilities(te.provider)
+	lotSize = broker.NormalizeLots(caps, lotSize)
+	orderSymbol := signal.Symbol
+	if te.provider == "oanda" {
+		orderSymbol = broker.NormalizeSymbolForProvider(te.provider, signal.Symbol)
+	}
 
 	// Execute order with retry logic
 	var position *models.Position
 	for attempt := 1; attempt <= te.maxRetries; attempt++ {
 		position, err = te.broker.OpenMarketOrder(
-			signal.Symbol,
+			orderSymbol,
 			signal.Type,
 			lotSize,
 			signal.StopLoss,
@@ -117,8 +134,12 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 		if err == nil {
 			break
 		}
+		err = broker.ClassifyError(te.provider, err)
 
 		logger.Warn("Trade execution failed (attempt %d/%d): %v", attempt, te.maxRetries, err)
+		if !broker.IsRetryable(err) {
+			break
+		}
 		if attempt < te.maxRetries {
 			time.Sleep(time.Second * time.Duration(attempt))
 		}
@@ -130,6 +151,11 @@ func (te *TradeExecutor) ExecuteSignal(signal *models.TradeSignal) (*models.Posi
 	}
 
 	position.UserID = te.userID
+	if te.tier != nil {
+		if err := te.tier.RecordTrade(te.userID, signal.Type); err != nil {
+			logger.Warn("Trade usage record user %d: %v", te.userID, err)
+		}
+	}
 	source := autoTradeSource(signal)
 	if te.tradeLog != nil {
 		if _, err := te.tradeLog.RecordOpen(te.userID, position, source); err != nil {

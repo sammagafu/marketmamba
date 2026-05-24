@@ -8,6 +8,7 @@ import (
 	"forex-bot/internal/broker"
 	"forex-bot/internal/models"
 	"forex-bot/internal/positions"
+	"forex-bot/internal/tier"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -64,30 +65,52 @@ func (s *Server) handleBrokerTypes(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": broker.SupportedBrokerTypes()})
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"brokers":                broker.SupportedBrokerTypes(),
+		"brands":                 broker.SupportedBrands(),
+		"metaapi_brands":         broker.MetaAPIBrands(),
+		"metaapi_shared_token":   broker.UsesSharedMetaAPIToken(),
+		"connection_method":      "MT brokers (Deriv, Exness, Tickmill, etc.) use the MetaAPI cloud bridge to your MT4/MT5 login.",
+	})
 }
 
 func (s *Server) getBrokerConnection(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r)
-	conn, err := s.storage.GetActiveBrokerConnection(uid)
+	conns, err := s.storage.ListBrokerConnections(uid)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if conn == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"connection": nil})
-		return
+	primary, _ := s.storage.GetPrimaryBrokerConnection(uid)
+	payload := map[string]interface{}{
+		"connection":  nil,
+		"connections": []interface{}{},
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"connection": map[string]interface{}{
-			"provider":   conn.Provider,
-			"label":      conn.Label,
-			"updated_at": conn.UpdatedAt,
-		},
-	})
+	if primary != nil {
+		payload["connection"] = map[string]interface{}{
+			"id":          primary.ID,
+			"provider":    primary.Provider,
+			"label":       primary.Label,
+			"is_primary":  primary.IsPrimary,
+			"updated_at":  primary.UpdatedAt,
+		}
+	}
+	list := make([]map[string]interface{}, 0, len(conns))
+	for _, c := range conns {
+		list = append(list, map[string]interface{}{
+			"id":         c.ID,
+			"provider":   c.Provider,
+			"label":      c.Label,
+			"is_primary": c.IsPrimary,
+			"updated_at": c.UpdatedAt,
+		})
+	}
+	payload["connections"] = list
+	writeJSON(w, http.StatusOK, payload)
 }
 
 type saveBrokerRequest struct {
+	BrandID     string            `json:"brand_id"`
 	Provider    string            `json:"provider"`
 	Label       string            `json:"label"`
 	Credentials map[string]string `json:"credentials"`
@@ -100,15 +123,33 @@ func (s *Server) saveBrokerConnection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if err := broker.SaveConnection(s.storage, s.cfg.App.BrokerEncryptionKey, uid, req.Provider, req.Label, req.Credentials); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if s.tier != nil {
+		if err := s.tier.CanAddBroker(uid); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	var saveErr error
+	if req.BrandID != "" {
+		saveErr = broker.SaveBrandConnection(s.storage, s.cfg.App.BrokerEncryptionKey, uid, req.BrandID, req.Label, req.Credentials)
+	} else {
+		saveErr = broker.SaveConnection(s.storage, s.cfg.App.BrokerEncryptionKey, uid, req.Provider, req.Label, req.Credentials)
+	}
+	if saveErr != nil {
+		writeError(w, http.StatusBadRequest, saveErr.Error())
 		return
 	}
 	if _, err := broker.ResolveBrokerAndSync(s.storage, uid, s.cfg.App.BrokerEncryptionKey, s.cfg.Broker.Provider); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"message": "saved", "provider": req.Provider})
+	provider := req.Provider
+	if req.BrandID != "" {
+		if b, ok := broker.BrandByID(req.BrandID); ok {
+			provider = b.AdapterID
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "saved", "provider": provider, "brand_id": req.BrandID})
 }
 
 func (s *Server) handleBrokerConnection(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +173,19 @@ func (s *Server) handleBrokerTest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	b, err := broker.NewFromProvider(req.Provider, req.Credentials)
+	provider := req.Provider
+	creds := req.Credentials
+	if req.BrandID != "" {
+		var err error
+		provider, creds, _, err = broker.ResolveBrandConnection(req.BrandID, req.Label, req.Credentials)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else {
+		creds = broker.ApplySharedMetaAPIToken(creds)
+	}
+	b, err := broker.NewFromProvider(provider, creds)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -143,7 +196,7 @@ func (s *Server) handleBrokerTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uid := userIDFrom(r)
-	if err := accounts.SyncFromBroker(s.storage, uid, req.Provider, b); err != nil {
+	if err := accounts.SyncFromBroker(s.storage, uid, provider, b); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -242,10 +295,16 @@ func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uid := userIDFrom(r)
-	sub, _ := s.subs.GetForUser(uid)
-	canTrade, msg := s.subs.CanTrade(uid)
+	writeJSON(w, http.StatusOK, s.subs.SubscriptionStatus(uid))
+}
+
+func (s *Server) handleTiers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"subscription": sub, "can_trade": canTrade, "message": msg,
+		"plans": tier.AllPlans(),
 	})
 }
 
@@ -275,7 +334,20 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, stats)
+	payload := map[string]interface{}{
+		"stats": stats,
+	}
+	if counts, err := s.storage.CountBrokerConnectionsByProvider(); err == nil {
+		payload["broker_connections"] = counts
+	}
+	brands := make([]map[string]string, 0)
+	for _, b := range broker.SupportedBrands() {
+		brands = append(brands, map[string]string{
+			"id": b.ID, "name": b.DisplayName, "adapter": b.AdapterID, "status": b.Status,
+		})
+	}
+	payload["enabled_broker_brands"] = brands
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {

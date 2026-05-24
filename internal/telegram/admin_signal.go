@@ -36,7 +36,7 @@ func (tb *TelegramBot) handleAdminSignal(chatID int64) {
 		tb.sendMessage(chatID, msg)
 		return
 	}
-	n, err := signals.PublishManual(ps, tb.subs, tb, tb.validator, tb.cfg.App.SignalMinStrength, sig, false)
+	n, err := signals.PublishManual(ps, tb.subs, tb.tier, tb, tb.validator, tb.cfg.App.SignalMinStrength, sig, false)
 	if err != nil {
 		tb.sendMessage(chatID, "❌ "+err.Error())
 		return

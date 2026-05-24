@@ -7,16 +7,23 @@ import (
 	"forex-bot/internal/config"
 	"forex-bot/internal/models"
 	"forex-bot/internal/storage"
+	"forex-bot/internal/tier"
 	"forex-bot/internal/utils"
 )
 
 type Service struct {
-	store  *storage.PostgresStorage
-	cfg    *config.Config
+	store *storage.PostgresStorage
+	cfg   *config.Config
+	tier *tier.Service
 }
 
 func NewService(store *storage.PostgresStorage, cfg *config.Config) *Service {
 	return &Service{store: store, cfg: cfg}
+}
+
+// SetTier wires tier quota checks into subscription status.
+func (s *Service) SetTier(t *tier.Service) {
+	s.tier = t
 }
 
 // CanAutoTrade checks subscription and optional admin approval for /autostart execution.
@@ -161,6 +168,11 @@ func (s *Service) SubscriptionStatus(userID int64) map[string]interface{} {
 		if sub.ExpiresAt != nil {
 			out["expires_at"] = sub.ExpiresAt.Format(time.RFC3339)
 			out["days_left"] = int(time.Until(*sub.ExpiresAt).Hours() / 24)
+		}
+	}
+	if s.tier != nil {
+		if snap, err := s.tier.Snapshot(userID); err == nil {
+			out["tier"] = snap
 		}
 	}
 	return out

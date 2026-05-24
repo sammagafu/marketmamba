@@ -18,6 +18,7 @@ import (
 	"forex-bot/internal/risk"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
+	"forex-bot/internal/tier"
 	"forex-bot/internal/users"
 )
 
@@ -30,6 +31,7 @@ type TelegramBot struct {
 	validator        *risk.RiskValidator
 	users            *users.Service
 	subs             *subscription.Service
+	tier             *tier.Service
 	resolveBroker    BrokerResolver
 	outcomeNotifier  feedback.OutcomeNotifier
 	decisionEngine   *decision.Engine
@@ -47,6 +49,7 @@ func NewTelegramBot(
 	v *risk.RiskValidator,
 	u *users.Service,
 	sub *subscription.Service,
+	tierSvc *tier.Service,
 ) (*TelegramBot, error) {
 	api, err := tgbotapi.NewBotAPI(cfg.Telegram.BotToken)
 	if err != nil {
@@ -59,6 +62,7 @@ func NewTelegramBot(
 		validator:     v,
 		users:         u,
 		subs:          sub,
+		tier:          tierSvc,
 		resolveBroker: brokerResolver,
 	}, nil
 }
@@ -221,7 +225,7 @@ Welcome! Your Telegram ID: `+"`%d`"+`
 /subscribe — plans & payment info
 /myplan — your subscription
 /status — bot status
-/broker — connect demo broker
+/broker — connect broker (demo or MetaAPI MT wizard link)
 
 *Trading:*
 /open /close /positions /trades /balance
@@ -424,6 +428,12 @@ func (tb *TelegramBot) handleOpen(chatID int64, userID int64, args []string) {
 	qty, _ := strconv.ParseFloat(args[2], 64)
 	sl, _ := strconv.ParseFloat(args[3], 64)
 	tp, _ := strconv.ParseFloat(args[4], 64)
+	if tb.tier != nil {
+		if err := tb.tier.CanExecuteTrade(userID, orderType); err != nil {
+			tb.sendMessage(chatID, "❌ "+err.Error())
+			return
+		}
+	}
 	signal := &models.TradeSignal{Symbol: symbol, Type: orderType, StopLoss: sl, TakeProfit: tp, Strength: 1.0, TriggeredAt: time.Now()}
 	botState, _ := tb.storage.GetBotState(userID)
 	if err := tb.validator.ValidateTradeSignal(signal, 10000, 0, 0, 0, botState.IsPaused); err != nil {
@@ -436,6 +446,9 @@ func (tb *TelegramBot) handleOpen(chatID int64, userID int64, args []string) {
 		return
 	}
 	pos.UserID = userID
+	if tb.tier != nil {
+		_ = tb.tier.RecordTrade(userID, orderType)
+	}
 	if err := tb.logTradeOpen(userID, pos, "MANUAL"); err != nil {
 		tb.sendMessage(chatID, fmt.Sprintf("✅ Opened %s %s — ID %s\n⚠️ Log failed: %v", symbol, orderType, pos.ID, err))
 		return

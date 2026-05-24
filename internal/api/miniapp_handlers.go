@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"forex-bot/internal/auth"
@@ -76,5 +77,7 @@ func (s *Server) handleMiniAppDashboard(w http.ResponseWriter, r *http.Request) 
 		"daily_stats":  today,
 		"subscription": subStatus,
 		"pricing":      s.payments.Pricing(),
+		"public_site_url": s.cfg.App.PublicSiteURL,
+		"connect_url":     strings.TrimRight(s.cfg.App.PublicSiteURL, "/") + "/#/connect",
 	})
 }

@@ -26,6 +26,7 @@ import (
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
 	"forex-bot/internal/telegram"
+	"forex-bot/internal/tier"
 	"forex-bot/internal/trading"
 	"forex-bot/internal/users"
 )
@@ -72,7 +73,12 @@ func main() {
 		return broker.ResolveBrokerAndSync(db, userID, cfg.App.BrokerEncryptionKey, cfg.Broker.Provider)
 	}
 
+	broker.SetEnabledBrands(cfg.Broker.EnabledBrokerBrands)
+	broker.SetSharedMetaAPIToken(cfg.Broker.MetaAPISharedToken)
+
 	subs := subscription.NewService(db, cfg)
+	tierSvc := tier.NewService(db, cfg)
+	subs.SetTier(tierSvc)
 	paySvc := payments.NewService(db, subs, cfg)
 	pairSvc := pairs.NewService(db, cfg)
 	usersSvc := users.NewService(db, subs, cfg)
@@ -85,7 +91,7 @@ func main() {
 		RiskRewardRatio: cfg.Risk.RiskRewardRatio,
 	})
 
-	tgBot, err := telegram.NewTelegramBot(cfg, resolveBroker, db, validator, usersSvc, subs)
+	tgBot, err := telegram.NewTelegramBot(cfg, resolveBroker, db, validator, usersSvc, subs, tierSvc)
 	if err != nil {
 		log.Fatalf("Telegram bot initialization failed: %v", err)
 	}
@@ -129,12 +135,12 @@ func main() {
 		}
 	}
 
-	coordinator := trading.NewCoordinator(db, cfg, subs, validator, resolveBroker, outcomeSvc, pairSvc, decisionEngine, sniperNotify)
+	coordinator := trading.NewCoordinator(db, cfg, subs, tierSvc, validator, resolveBroker, outcomeSvc, pairSvc, decisionEngine, sniperNotify)
 	coordinator.Start(ctx)
 
 	if cfg.App.SignalBroadcastEnabled {
 		pub := signals.NewPublisher(
-			db, subs, tgBot, validator, decisionEngine,
+			db, subs, tierSvc, tgBot, validator, decisionEngine,
 			cfg.SignalSymbols(), cfg.SignalBroadcastInterval(),
 			cfg.App.SignalMinStrength,
 			cfg.App.DecisionEnabled,
@@ -143,7 +149,7 @@ func main() {
 	}
 
 	if cfg.App.EnableWeb {
-		apiServer := api.NewServer(cfg, db, subs, paySvc, usersSvc, resolveBroker, tgBot, validator, pairSvc)
+		apiServer := api.NewServer(cfg, db, subs, tierSvc, paySvc, usersSvc, resolveBroker, tgBot, validator, pairSvc)
 		go func() {
 			addr := ":" + cfg.App.HTTPPort
 			logger.Info("Web dashboard listening on %s", addr)

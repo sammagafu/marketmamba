@@ -15,6 +15,7 @@ import (
 	"forex-bot/internal/signals"
 	"forex-bot/internal/storage"
 	"forex-bot/internal/subscription"
+	"forex-bot/internal/tier"
 	"forex-bot/internal/users"
 )
 
@@ -27,6 +28,7 @@ type Server struct {
 	cfg           *config.Config
 	storage       *storage.PostgresStorage
 	subs          *subscription.Service
+	tier          *tier.Service
 	payments      *payments.Service
 	users         *users.Service
 	resolveBroker    BrokerResolver
@@ -36,11 +38,12 @@ type Server struct {
 	mux              *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, paySvc *payments.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator, pairSvc *pairs.Service) *Server {
+func NewServer(cfg *config.Config, store *storage.PostgresStorage, subs *subscription.Service, tierSvc *tier.Service, paySvc *payments.Service, usersSvc *users.Service, resolve BrokerResolver, notifier signals.Notifier, validator *risk.RiskValidator, pairSvc *pairs.Service) *Server {
 	s := &Server{
 		cfg:              cfg,
 		storage:          store,
 		subs:             subs,
+		tier:             tierSvc,
 		payments:         paySvc,
 		users:            usersSvc,
 		resolveBroker:    resolve,
@@ -70,6 +73,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/positions", s.withUser(s.handlePositions))
 	s.mux.HandleFunc("/api/v1/trades", s.withUser(s.handleTrades))
 	s.mux.HandleFunc("/api/v1/subscription", s.withUser(s.handleSubscription))
+	s.mux.HandleFunc("/api/v1/tiers", s.handleTiers)
 	s.mux.HandleFunc("/api/v1/miniapp/dashboard", s.withUser(s.handleMiniAppDashboard))
 	s.mux.HandleFunc("/api/v1/payments/binance/order", s.withUser(s.handlePaymentOrderCreate))
 	s.mux.HandleFunc("/api/v1/payments/binance/confirm", s.withUser(s.handlePaymentOrderConfirm))
