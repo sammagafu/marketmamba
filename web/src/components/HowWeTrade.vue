@@ -31,21 +31,32 @@ import {
     </ol>
 
     <div class="how-columns">
-      <div class="how-block">
-        <p class="section-eyebrow">Technical filters</p>
-        <h3 class="how-block-title">What we measure</h3>
+      <div class="how-block how-block-filters">
+        <header class="how-block-head">
+          <p class="section-eyebrow">Technical filters</p>
+          <h3 class="how-block-title">What we measure</h3>
+        </header>
         <ul class="how-card-list">
-          <li v-for="ind in INDICATORS" :key="ind.name" class="how-card">
-            <span class="how-tag">{{ ind.tag }}</span>
-            <strong class="how-card-name">{{ ind.name }}</strong>
+          <li
+            v-for="ind in INDICATORS"
+            :key="ind.name"
+            class="how-card"
+            :class="ind.tone ? `how-card--${ind.tone}` : ''"
+          >
+            <div class="how-card-head">
+              <span class="how-tag">{{ ind.tag }}</span>
+              <strong class="how-card-name">{{ ind.name }}</strong>
+            </div>
             <p class="how-card-detail">{{ ind.detail }}</p>
           </li>
         </ul>
       </div>
 
-      <div class="how-block">
-        <p class="section-eyebrow">Risk framework</p>
-        <h3 class="how-block-title">What we enforce</h3>
+      <div class="how-block how-block-risk">
+        <header class="how-block-head">
+          <p class="section-eyebrow">Risk framework</p>
+          <h3 class="how-block-title">What we enforce</h3>
+        </header>
         <ul class="how-card-list">
           <li v-for="rule in RISK_CONTROLS" :key="rule.name" class="how-card how-card-risk">
             <div class="how-risk-top">
@@ -153,21 +164,60 @@ import {
 
 .how-columns {
   display: grid;
-  gap: 2rem;
-  margin-bottom: 2rem;
+  gap: 0;
+  margin-bottom: 2.25rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
 }
 
 @media (min-width: 900px) {
   .how-columns {
     grid-template-columns: 1fr 1fr;
-    gap: 2.5rem;
   }
 }
 
+.how-block {
+  padding: 1.35rem 1.25rem 1.25rem;
+  min-width: 0;
+}
+
+@media (max-width: 899px) {
+  .how-block-filters {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (min-width: 900px) {
+  .how-block-filters {
+    border-right: 1px solid var(--border);
+  }
+}
+
+.how-block-filters {
+  background: linear-gradient(180deg, var(--brand-muted) 0%, transparent 28%);
+}
+
+.how-block-risk {
+  background: var(--surface-raised);
+}
+
+.how-block-head {
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.how-block-filters .section-eyebrow {
+  color: var(--brand);
+}
+
 .how-block-title {
-  margin: 0 0 1rem;
-  font-size: 1rem;
+  margin: 0.2rem 0 0;
+  font-size: 1.0625rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .how-card-list {
@@ -175,53 +225,87 @@ import {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
 .how-card {
-  padding: 0.9rem 1rem;
+  padding: 0.85rem 0.95rem;
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--border);
+  transition: border-color 0.15s ease;
+}
+
+.how-block-risk .how-card {
+  background: var(--surface);
+}
+
+.how-card:hover {
+  border-color: var(--border-strong);
+}
+
+.how-card--trend { border-left: 2px solid rgba(61, 255, 122, 0.55); }
+.how-card--momentum { border-left: 2px solid rgba(94, 179, 255, 0.45); }
+.how-card--volatility { border-left: 2px solid rgba(192, 132, 252, 0.4); }
+.how-card--cost { border-left: 2px solid rgba(251, 191, 36, 0.45); }
+
+.how-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-bottom: 0.4rem;
 }
 
 .how-tag {
   display: inline-block;
-  margin-bottom: 0.35rem;
-  font-size: 0.625rem;
+  padding: 0.18rem 0.45rem;
+  font-size: 0.5625rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .how-card-name {
-  display: block;
   font-size: 0.875rem;
-  margin-bottom: 0.25rem;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .how-card-detail {
   margin: 0;
   font-size: 0.8125rem;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--muted);
+}
+
+.how-card-risk {
+  border-left: 2px solid var(--brand);
 }
 
 .how-risk-top {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.35rem 0.75rem;
-  margin-bottom: 0.25rem;
+  gap: 0.4rem 0.75rem;
+  margin-bottom: 0.35rem;
 }
 
 .how-risk-value {
-  font-size: 0.875rem;
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--brand);
   font-variant-numeric: tabular-nums;
+  border: 1px solid var(--brand-muted);
+  border-radius: 6px;
+  background: var(--brand-soft);
 }
 
 .how-sources {
