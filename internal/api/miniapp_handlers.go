@@ -71,13 +71,13 @@ func (s *Server) handleMiniAppDashboard(w http.ResponseWriter, r *http.Request) 
 		posList = userPos
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	out := map[string]interface{}{
 		"trades":                trades,
 		"positions":             posList,
 		"payments":              orders,
 		"daily_stats":           today,
 		"subscription":          subStatus,
-		"packages":              tier.PublicPackages(s.cfg.Payments.SubscriptionPriceUSDT, s.cfg.App.FreeTrialDays),
+		"packages":              tier.PublicPackages(s.cfg.Payments.SubscriptionPriceUSDT, s.cfg.App.FreeTrialDays, s.cfg.IsFullAssetCatalog()),
 		"pricing":               s.payments.Pricing(),
 		"public_site_url":       s.cfg.App.PublicSiteURL,
 		"connect_url":           strings.TrimRight(s.cfg.App.PublicSiteURL, "/") + "/#/connect",
@@ -86,5 +86,12 @@ func (s *Server) handleMiniAppDashboard(w http.ResponseWriter, r *http.Request) 
 		"contact_us_label":      s.cfg.App.ContactUsLabel,
 		"payment_note":          "USDT via Binance only — no cards.",
 		"telegram_bot_username": s.cfg.Telegram.BotUsername,
-	})
+	}
+	phase := s.cfg.CommunityPhasePublic()
+	out["asset_phase"] = phase.AssetPhase
+	out["asset_phase_unlocked"] = phase.AssetPhaseUnlocked
+	out["community_phase_message"] = phase.CommunityPhaseMessage
+	out["community_locked_hint"] = phase.CommunityLockedHint
+	out["ai_training_note"] = phase.AITrainingNote
+	writeJSON(w, http.StatusOK, out)
 }

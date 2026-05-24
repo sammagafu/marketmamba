@@ -22,8 +22,27 @@ const props = defineProps({
 
 defineEmits(['error'])
 
-const tickers = ['BTCUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD']
-const featuredPair = 'BTCUSD'
+const defaultTickers = ['BTCUSD', 'ETHUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD']
+
+const tickers = computed(() => {
+  const syms = props.config?.signal_symbols
+  if (Array.isArray(syms) && syms.length) {
+    return syms.length >= 2 ? syms : [...syms, 'ETHUSD']
+  }
+  if (props.config?.asset_phase_unlocked === false) {
+    return ['BTCUSD', 'ETHUSD']
+  }
+  return defaultTickers
+})
+
+const featuredPair = computed(() => tickers.value[0] || 'BTCUSD')
+
+const communityMessage = computed(() => {
+  if (props.config?.asset_phase_unlocked) return ''
+  return props.config?.community_phase_message || ''
+})
+
+const aiTrainingNote = computed(() => props.config?.ai_training_note || '')
 const headlineWord = ref(0)
 const words = HERO_FOCUS_WORDS
 const displayTrades = ref(0)
@@ -105,6 +124,12 @@ onUnmounted(() => {
           <span class="line-flip" :key="words[headlineWord]">{{ words[headlineWord] }}</span>
         </h1>
 
+        <p v-if="communityMessage" class="hero-community">
+          {{ communityMessage }}
+        </p>
+        <p v-if="aiTrainingNote" class="hero-community-ai">
+          {{ aiTrainingNote }}
+        </p>
         <p class="hero-lede hero-lede-primary">
           {{ config?.value_proposition || VALUE_PROPOSITION }}
         </p>
@@ -422,6 +447,21 @@ onUnmounted(() => {
   }
 }
 
+.hero-community {
+  margin: 0 0 0.5rem;
+  max-width: 38rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--accent, #22c55e);
+}
+.hero-community-ai {
+  margin: 0 0 0.85rem;
+  max-width: 38rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+  opacity: 0.92;
+}
 .hero-lede-primary {
   margin: 0 0 0.85rem;
   max-width: 38rem;

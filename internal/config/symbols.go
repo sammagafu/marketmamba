@@ -35,39 +35,9 @@ func parseSymbolCSV(csv string, defaults []string) []string {
 	return ParseSignalSymbols(csv, "")
 }
 
-// SignalCatalog returns platform symbols grouped by asset class.
+// SignalCatalog returns platform symbols grouped by asset class (respects community launch phase).
 func (c *Config) SignalCatalog() (forex, indexes, crypto []string) {
-	forexDef := []string{"EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "EURJPY"}
-	indexDef := []string{"US500", "USTEC", "GER40", "UK100", "VOL75"}
-	cryptoDef := []string{"BTCUSD", "ETHUSD"}
-	if c == nil {
-		return forexDef, indexDef, cryptoDef
-	}
-	forex = parseSymbolCSV(getEnv("SIGNAL_FOREX_SYMBOLS", ""), forexDef)
-	indexes = parseSymbolCSV(getEnv("SIGNAL_INDEX_SYMBOLS", ""), indexDef)
-	crypto = parseSymbolCSV(getEnv("SIGNAL_CRYPTO_SYMBOLS", ""), cryptoDef)
-	// Legacy flat list augments forex+crypto when per-class envs are unset
-	if getEnv("SIGNAL_FOREX_SYMBOLS", "") == "" && getEnv("SIGNAL_INDEX_SYMBOLS", "") == "" &&
-		getEnv("SIGNAL_CRYPTO_SYMBOLS", "") == "" && len(c.App.SignalSymbols) > 0 {
-		for _, sym := range c.App.SignalSymbols {
-			sym = strings.ToUpper(strings.TrimSpace(sym))
-			switch sym {
-			case "BTCUSD", "ETHUSD":
-				if !containsSym(crypto, sym) {
-					crypto = append(crypto, sym)
-				}
-			case "US500", "USTEC", "GER40", "UK100", "VOL75":
-				if !containsSym(indexes, sym) {
-					indexes = append(indexes, sym)
-				}
-			default:
-				if !containsSym(forex, sym) {
-					forex = append(forex, sym)
-				}
-			}
-		}
-	}
-	return forex, indexes, crypto
+	return c.PhasedSignalCatalog()
 }
 
 func containsSym(list []string, sym string) bool {

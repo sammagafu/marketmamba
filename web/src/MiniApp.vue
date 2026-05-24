@@ -39,6 +39,9 @@ const contactLabel = ref('Contact us')
 const paymentNote = ref('')
 const signalTypes = ref({ forex: true, indexes: true, crypto: true })
 const showAllTrades = ref(false)
+const communityMessage = ref('')
+const aiTrainingNote = ref('')
+const assetPhaseUnlocked = ref(true)
 
 const canTrade = computed(() => subscription.value?.can_trade === true)
 const tierInfo = computed(() => subscription.value?.tier || null)
@@ -135,6 +138,9 @@ async function loadDashboard() {
   contactUrl.value = data.contact_us_url || ''
   contactLabel.value = data.contact_us_label || 'Contact us'
   paymentNote.value = data.payment_note || PAYMENT_NOTE
+  communityMessage.value = data.community_phase_message || ''
+  aiTrainingNote.value = data.ai_training_note || ''
+  assetPhaseUnlocked.value = data.asset_phase_unlocked !== false
 }
 
 async function refresh() {
@@ -377,6 +383,15 @@ onMounted(async () => {
       </div>
 
       <p class="tg-lead">{{ valueProposition }}</p>
+
+      <div
+        v-if="!assetPhaseUnlocked && communityMessage"
+        class="community-banner"
+        role="status"
+      >
+        <p class="community-banner-body">{{ communityMessage }}</p>
+        <p v-if="aiTrainingNote" class="community-banner-ai">{{ aiTrainingNote }}</p>
+      </div>
 
       <!-- Membership -->
       <section class="tg-card tg-card-accent">
@@ -770,6 +785,25 @@ onMounted(async () => {
   margin: 0 0 0.85rem;
   font-size: 0.8125rem;
   line-height: 1.5;
+  color: var(--mm-muted);
+}
+
+.community-banner {
+  margin: 0 0 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.07);
+}
+.community-banner-body,
+.community-banner-ai {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--mm-text);
+}
+.community-banner-ai {
+  margin-top: 0.4rem;
   color: var(--mm-muted);
 }
 

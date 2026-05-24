@@ -14,6 +14,11 @@ func DefaultSignalTypes() SignalTypePreferences {
 	return SignalTypePreferences{Forex: true, Indexes: true, Crypto: true}
 }
 
+// BitcoinPhaseSignalTypes is the community launch default (crypto only).
+func BitcoinPhaseSignalTypes() SignalTypePreferences {
+	return SignalTypePreferences{Forex: false, Indexes: false, Crypto: true}
+}
+
 // SignalAssetGroup describes one selectable signal type in the UI.
 type SignalAssetGroup struct {
 	ID          string   `json:"id"`
@@ -21,6 +26,8 @@ type SignalAssetGroup struct {
 	Description string   `json:"description"`
 	Symbols     []string `json:"symbols"`
 	Enabled     bool     `json:"enabled"`
+	Locked      bool     `json:"locked,omitempty"`
+	ComingSoon  bool     `json:"coming_soon,omitempty"`
 }
 
 // UserSignalPreferencesRow is the DB shape.

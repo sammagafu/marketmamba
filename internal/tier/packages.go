@@ -16,7 +16,7 @@ type PublicPlan struct {
 }
 
 // PublicPackages returns display-ready plans (trial, monthly, pro). Manual/VIP omitted from public list.
-func PublicPackages(monthlyPriceUSDT float64, trialDays int) []PublicPlan {
+func PublicPackages(monthlyPriceUSDT float64, trialDays int, fullCatalog bool) []PublicPlan {
 	if monthlyPriceUSDT <= 0 {
 		monthlyPriceUSDT = 10
 	}
@@ -36,7 +36,7 @@ func PublicPackages(monthlyPriceUSDT float64, trialDays int) []PublicPlan {
 			ContactOnly: false,
 			Recommended: false,
 			Limits:      trial,
-			Features:    planFeatures(trial),
+			Features:    planFeatures(trial, fullCatalog),
 		},
 		{
 			ID:          "monthly",
@@ -47,7 +47,7 @@ func PublicPackages(monthlyPriceUSDT float64, trialDays int) []PublicPlan {
 			ContactOnly: false,
 			Recommended: true,
 			Limits:      monthly,
-			Features:    planFeatures(monthly),
+			Features:    planFeatures(monthly, fullCatalog),
 		},
 		{
 			ID:          "pro",
@@ -57,17 +57,21 @@ func PublicPackages(monthlyPriceUSDT float64, trialDays int) []PublicPlan {
 			ContactOnly: true,
 			Recommended: false,
 			Limits:      pro,
-			Features:    planFeatures(pro),
+			Features:    planFeatures(pro, fullCatalog),
 		},
 	}
 }
 
-func planFeatures(l Limits) []string {
+func planFeatures(l Limits, fullCatalog bool) []string {
+	signalLine := "Bitcoin & Ethereum signals during community launch; more asset classes unlock for all members as the community grows"
+	if fullCatalog {
+		signalLine = "Forex, indexes & crypto signal types"
+	}
 	return []string{
 		fmt.Sprintf("%d broker account%s", l.MaxBrokerAccounts, plural(l.MaxBrokerAccounts)),
 		fmt.Sprintf("%d signals per month", l.MaxSignalsPerPeriod),
 		fmt.Sprintf("%d long + %d short trades / month", l.MaxLongTrades, l.MaxShortTrades),
-		"Forex, indexes & crypto signal types",
+		signalLine,
 		"Telegram Mini App dashboard",
 	}
 }

@@ -4,7 +4,17 @@ import { api } from '../api'
 
 const props = defineProps({
   canTrade: { type: Boolean, default: true },
+  config: { type: Object, default: null },
 })
+
+const communityLaunch = computed(
+  () => props.config && props.config.asset_phase_unlocked === false,
+)
+const communityMessage = computed(
+  () => props.config?.community_phase_message || '',
+)
+const aiTrainingNote = computed(() => props.config?.ai_training_note || '')
+const lockedHint = computed(() => props.config?.community_locked_hint || '')
 
 const emit = defineEmits(['message'])
 
@@ -80,8 +90,17 @@ function syncTypesFromGroups() {
   }
 }
 
+function groupForType(id) {
+  return assetGroups.value.find((g) => g.id === id)
+}
+
 function toggleType(id) {
   if (!props.canTrade) return
+  const g = groupForType(id)
+  if (g?.locked || g?.coming_soon) {
+    emit('message', { text: lockedHint.value || 'Coming soon for the community', ok: false })
+    return
+  }
   const next = { ...signalTypes.value }
   next[id] = !next[id]
   if (!next.forex && !next.indexes && !next.crypto) {
@@ -183,6 +202,12 @@ onMounted(load)
       symbols get Telegram alerts and auto-trade with <code>/autostart</code>.
     </p>
 
+    <div v-if="communityLaunch && communityMessage" class="community-banner" role="status">
+      <p class="community-banner-title">Community launch</p>
+      <p class="community-banner-body">{{ communityMessage }}</p>
+      <p v-if="aiTrainingNote" class="community-banner-ai">{{ aiTrainingNote }}</p>
+    </div>
+
     <div v-if="loading" class="pairs-loading" aria-busy="true">
       <div class="skel skel-wide" />
       <div class="skel-row">
@@ -206,17 +231,35 @@ onMounted(load)
           :key="t.id"
           type="button"
           class="type-card"
-          :class="[`type-card--${t.accent}`, { active: signalTypes[t.id] }]"
-          :disabled="!canTrade"
-          :aria-pressed="signalTypes[t.id]"
+          :class="[
+            `type-card--${t.accent}`,
+            {
+              active: signalTypes[t.id] && !groupForType(t.id)?.locked,
+              locked: groupForType(t.id)?.coming_soon,
+            },
+          ]"
+          :disabled="!canTrade || groupForType(t.id)?.locked"
+          :aria-pressed="signalTypes[t.id] && !groupForType(t.id)?.locked"
           @click="toggleType(t.id)"
         >
           <span class="type-icon" aria-hidden="true">{{ t.icon }}</span>
           <span class="type-body">
             <strong class="type-title">{{ t.title }}</strong>
-            <span class="type-hint">{{ t.hint }}</span>
+            <span class="type-hint">
+              {{
+                groupForType(t.id)?.coming_soon
+                  ? 'Coming soon for the community'
+                  : t.hint
+              }}
+            </span>
           </span>
-          <span class="type-pill">{{ signalTypes[t.id] ? 'On' : 'Off' }}</span>
+          <span class="type-pill">{{
+            groupForType(t.id)?.coming_soon
+              ? 'Soon'
+              : signalTypes[t.id]
+                ? 'On'
+                : 'Off'
+          }}</span>
         </button>
       </div>
 
@@ -322,6 +365,35 @@ onMounted(load)
   margin: 0 0 1rem;
   font-size: 0.9rem;
   line-height: 1.55;
+}
+.community-banner {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+.community-banner-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent, #22c55e);
+}
+.community-banner-body,
+.community-banner-ai {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.community-banner-ai {
+  margin-top: 0.5rem;
+  opacity: 0.9;
+}
+.type-card.locked {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 .pairs-summary {
   display: flex;

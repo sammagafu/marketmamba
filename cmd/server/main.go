@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"forex-bot/internal/adminseed"
 	"forex-bot/internal/api"
@@ -51,6 +52,8 @@ func main() {
 		log.Fatalf("Database health check failed: %v", err)
 	}
 	logger.Info("Database connected successfully")
+
+	go refreshPaidSubscriberCount(context.Background(), db, cfg)
 
 	migrationsDir := os.Getenv("MIGRATIONS_DIR")
 	if migrationsDir == "" {
@@ -184,6 +187,34 @@ func warmupMarketData(ctx context.Context, svc *marketdata.Service, symbols []st
 	for _, sym := range symbols {
 		if _, err := svc.Refresh(ctx, sym); err != nil {
 			logger.Warn("Market warmup %s: %v", sym, err)
+		}
+	}
+}
+
+func refreshPaidSubscriberCount(ctx context.Context, db *storage.PostgresStorage, cfg *config.Config) {
+	if cfg == nil || cfg.Phase == nil {
+		return
+	}
+	refresh := func() {
+		n, err := db.CountPaidSubscribers(ctx)
+		if err != nil {
+			logger.Warn("CountPaidSubscribers: %v", err)
+			return
+		}
+		cfg.Phase.SetPaidCount(n)
+		if cfg.IsFullAssetCatalog() {
+			logger.Info("Community asset phase: full catalog unlocked (%d paying members)", n)
+		}
+	}
+	refresh()
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			refresh()
 		}
 	}
 }

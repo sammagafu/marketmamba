@@ -75,6 +75,12 @@ CONTACT_US_URL=https://t.me/your_bot
 CONTACT_US_LABEL=Contact us
 VALUE_PROPOSITION=Controlled automation with built-in risk limits — connect the broker you already use.
 
+# Community launch (Bitcoin-first; unlock is internal — no quota UI)
+ASSET_PHASE=bitcoin
+SIGNAL_BROADCAST_SYMBOLS=BTCUSD,ETHUSD
+UNLOCK_MIN_PAID_SUBSCRIBERS=100
+AI_TRAINING_NOTE=We're training our bots with AI for more precise entries.
+
 # Binance USDT checkout (Mini App)
 BINANCE_PAY_API_KEY=
 BINANCE_PAY_SECRET=

@@ -8,7 +8,11 @@ import (
 
 // NotifySignal implements signals.Notifier for Telegram subscribers.
 func (tb *TelegramBot) NotifySignal(telegramID int64, signal *models.TradeSignal) error {
-	tb.sendMessage(telegramID, signals.FormatMessage(signal))
+	footer := ""
+	if tb.cfg != nil && !tb.cfg.IsFullAssetCatalog() {
+		footer = "Launch phase · BTC & ETH"
+	}
+	tb.sendMessage(telegramID, signals.FormatMessageWithFooter(signal, footer))
 	return nil
 }
 

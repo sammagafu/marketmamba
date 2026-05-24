@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"forex-bot/internal/config"
 	"forex-bot/internal/models"
 	"forex-bot/internal/pairs"
 	"forex-bot/internal/storage"
@@ -31,9 +32,17 @@ func (tb *TelegramBot) handlePairs(chatID, userID int64, args []string) {
 		}
 		var b strings.Builder
 		b.WriteString("*Your signal setup*\n\n")
+		if note := communityLaunchNote(tb.cfg); note != "" {
+			b.WriteString(note)
+			b.WriteString("\n\n")
+		}
 		b.WriteString(formatSignalTypes(resp.SignalTypes))
 		b.WriteString("\n")
 		for _, g := range resp.AssetGroups {
+			if g.ComingSoon {
+				b.WriteString(fmt.Sprintf("*%s:* _coming soon for the community_\n", g.Label))
+				continue
+			}
 			if !g.Enabled {
 				continue
 			}
@@ -97,22 +106,41 @@ func (tb *TelegramBot) handleSignalTypes(chatID, userID int64, args []string) {
 		b.WriteString("*Signal types*\n\n")
 		b.WriteString(formatSignalTypes(resp.SignalTypes))
 		b.WriteString("\n")
+		if note := communityLaunchNote(tb.cfg); note != "" {
+			b.WriteString(note)
+			b.WriteString("\n\n")
+		}
 		for _, g := range resp.AssetGroups {
 			state := "off"
 			if g.Enabled {
 				state = "on"
 			}
+			if g.ComingSoon {
+				state = "coming soon"
+			}
 			b.WriteString(fmt.Sprintf("• *%s* (%s): %s\n", g.Label, state, strings.Join(g.Symbols, ", ")))
 		}
 		b.WriteString("\nEnable types:\n`/signaltypes forex indexes crypto`\n")
-		b.WriteString("`/signaltypes all` — enable everything\n")
+		if tb.cfg != nil && !tb.cfg.IsFullAssetCatalog() {
+			b.WriteString("`/signaltypes crypto` — Bitcoin & Ethereum (launch phase)\n")
+		} else {
+			b.WriteString("`/signaltypes all` — enable everything\n")
+		}
 		tb.sendMessage(chatID, b.String())
 		return
 	}
 
 	if strings.EqualFold(args[0], "all") {
-		if err := svc.SetSignalTypes(userID, models.DefaultSignalTypes()); err != nil {
+		prefs := models.DefaultSignalTypes()
+		if tb.cfg != nil && !tb.cfg.IsFullAssetCatalog() {
+			prefs = models.BitcoinPhaseSignalTypes()
+		}
+		if err := svc.SetSignalTypes(userID, prefs); err != nil {
 			tb.sendMessage(chatID, "❌ "+err.Error())
+			return
+		}
+		if tb.cfg != nil && !tb.cfg.IsFullAssetCatalog() {
+			tb.sendMessage(chatID, "✅ Community launch: Bitcoin & Ethereum signals enabled")
 			return
 		}
 		tb.sendMessage(chatID, "✅ Forex, indexes, and crypto signals enabled")
@@ -134,6 +162,21 @@ func (tb *TelegramBot) handleSignalTypes(chatID, userID int64, args []string) {
 		formatSignalTypes(resp.SignalTypes),
 		strings.Join(resp.AvailableSymbols, ", "),
 	))
+}
+
+func communityLaunchNote(cfg *config.Config) string {
+	if cfg == nil || cfg.IsFullAssetCatalog() {
+		return ""
+	}
+	note := strings.TrimSpace(cfg.App.AITrainingNote)
+	if note == "" {
+		note = "We're training our bots with AI for more precise entries."
+	}
+	phase := strings.TrimSpace(cfg.App.CommunityPhaseMessage)
+	if phase != "" {
+		return phase + "\n_" + note + "_"
+	}
+	return "_Community launch: Bitcoin & Ethereum. " + note + "_"
 }
 
 func formatSignalTypes(p models.SignalTypePreferences) string {

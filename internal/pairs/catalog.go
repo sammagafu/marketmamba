@@ -89,21 +89,35 @@ func (c PlatformCatalog) FilterByTypes(prefs models.SignalTypePreferences) []str
 }
 
 // AssetGroups builds UI/API groups with enabled flags from prefs.
-func (c PlatformCatalog) AssetGroups(prefs models.SignalTypePreferences) []models.SignalAssetGroup {
+func (c PlatformCatalog) AssetGroups(prefs models.SignalTypePreferences, fullCatalog bool, lockedHint string) []models.SignalAssetGroup {
+	forexLocked := !fullCatalog && len(c.Forex) > 0
+	indexLocked := !fullCatalog && len(c.Indexes) > 0
+	forexDesc := "Major and cross currency pairs (EUR/USD, GBP/USD, etc.)."
+	indexDesc := "Stock indices and volatility synthetics (US 500, NAS 100, Volatility 75)."
+	if forexLocked && lockedHint != "" {
+		forexDesc = lockedHint
+	}
+	if indexLocked && lockedHint != "" {
+		indexDesc = lockedHint
+	}
 	return []models.SignalAssetGroup{
 		{
 			ID:          AssetForex,
 			Label:       "Forex",
-			Description: "Major and cross currency pairs (EUR/USD, GBP/USD, etc.).",
+			Description: forexDesc,
 			Symbols:     append([]string(nil), c.Forex...),
-			Enabled:     prefs.Forex,
+			Enabled:     prefs.Forex && !forexLocked,
+			Locked:      forexLocked,
+			ComingSoon:  forexLocked,
 		},
 		{
 			ID:          AssetIndexes,
 			Label:       "Indexes",
-			Description: "Stock indices and volatility synthetics (US 500, NAS 100, Volatility 75).",
+			Description: indexDesc,
 			Symbols:     append([]string(nil), c.Indexes...),
-			Enabled:     prefs.Indexes,
+			Enabled:     prefs.Indexes && !indexLocked,
+			Locked:      indexLocked,
+			ComingSoon:  indexLocked,
 		},
 		{
 			ID:          AssetCrypto,
@@ -113,6 +127,18 @@ func (c PlatformCatalog) AssetGroups(prefs models.SignalTypePreferences) []model
 			Enabled:     prefs.Crypto,
 		},
 	}
+}
+
+// FullCatalog returns the unrestricted platform catalog (for locked-group symbol lists).
+func (c PlatformCatalog) FullCatalog(full PlatformCatalog) PlatformCatalog {
+	out := c
+	if len(full.Forex) > 0 {
+		out.Forex = full.Forex
+	}
+	if len(full.Indexes) > 0 {
+		out.Indexes = full.Indexes
+	}
+	return out
 }
 
 // ParseSignalTypesFromArgs maps telegram/web keywords to preference toggles.

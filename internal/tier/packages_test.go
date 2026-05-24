@@ -3,7 +3,7 @@ package tier
 import "testing"
 
 func TestPublicPackages(t *testing.T) {
-	pkgs := PublicPackages(10, 5)
+	pkgs := PublicPackages(10, 5, false)
 	if len(pkgs) != 3 {
 		t.Fatalf("expected 3 public plans, got %d", len(pkgs))
 	}

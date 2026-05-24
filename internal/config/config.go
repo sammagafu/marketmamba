@@ -17,6 +17,7 @@ type Config struct {
 	Risk     RiskConfig
 	App      AppConfig
 	Payments PaymentsConfig
+	Phase    *CommunityPhaseRuntime
 }
 
 // PaymentsConfig — Binance USDT subscription (10 USDT / month after trial).
@@ -90,6 +91,13 @@ type AppConfig struct {
 	DecisionAutoExecute     bool
 	MarketDataAPIKey           string // optional Twelve Data for richer live + seed bars
 	AutoTradeRequiresApproval bool
+	// Community launch phase (bitcoin-first; full catalog unlocks internally at threshold)
+	AssetPhase                 string
+	UnlockMinPaidSubscribers   int
+	CommunityPhaseMessage      string
+	CommunityLockedHint        string
+	CommunityUnlockMessage     string
+	AITrainingNote             string
 }
 
 func LoadConfig() (*Config, error) {
@@ -139,7 +147,7 @@ func LoadConfig() (*Config, error) {
 			PublicSiteURL:              strings.TrimRight(getEnv("PUBLIC_SITE_URL", "https://marketmamba.kkooapp.co.tz"), "/"),
 			SignalBroadcastEnabled:     getEnv("SIGNAL_BROADCAST_ENABLED", "true") == "true",
 			SignalBroadcastIntervalSec: parseInt(getEnv("SIGNAL_BROADCAST_INTERVAL_SEC", "300")),
-			SignalBroadcastSymbol:      getEnv("SIGNAL_BROADCAST_SYMBOL", "EURUSD"),
+			SignalBroadcastSymbol:      getEnv("SIGNAL_BROADCAST_SYMBOL", "BTCUSD"),
 			SignalMinStrength:          parseFloat(getEnv("SIGNAL_MIN_STRENGTH", "0.7")),
 			DecisionEnabled:            getEnv("DECISION_ENABLED", "true") == "true",
 			DecisionIntervalSec:      parseInt(getEnv("DECISION_INTERVAL_SEC", "60")),
@@ -149,6 +157,16 @@ func LoadConfig() (*Config, error) {
 			DecisionAutoExecute:      parseDecisionAuto(getEnv("DECISION_MODE", "both")),
 			MarketDataAPIKey:           getEnv("MARKET_DATA_API_KEY", ""),
 			AutoTradeRequiresApproval: getEnv("AUTO_TRADE_REQUIRES_APPROVAL", "false") == "true",
+			AssetPhase: getEnv("ASSET_PHASE", "bitcoin"),
+			UnlockMinPaidSubscribers: parseInt(getEnv("UNLOCK_MIN_PAID_SUBSCRIBERS", "100")),
+			CommunityPhaseMessage: getEnv("COMMUNITY_PHASE_MESSAGE",
+				"We're in community launch: Bitcoin and Ethereum while our AI learns precise entries. Forex, gold, and indexes open for everyone as membership grows."),
+			CommunityLockedHint: getEnv("COMMUNITY_LOCKED_HINT",
+				"Coming soon for the community — opens for all members as more traders join with a paid plan."),
+			CommunityUnlockMessage: getEnv("COMMUNITY_UNLOCK_MESSAGE",
+				"Community unlock — forex, indexes, and more pairs are now live for all members. Thank you for supporting Market Mamba."),
+			AITrainingNote: getEnv("AI_TRAINING_NOTE",
+				"We're training our bots with AI for more precise entries — signals improve as the community grows."),
 		},
 		Payments: PaymentsConfig{
 			SubscriptionPriceUSDT: parseFloat(getEnv("SUBSCRIPTION_PRICE_USDT", "10")),
@@ -167,10 +185,15 @@ func LoadConfig() (*Config, error) {
 	if cfg.App.ContactUsURL == "" && cfg.Telegram.BotUsername != "" {
 		cfg.App.ContactUsURL = "https://t.me/" + cfg.Telegram.BotUsername
 	}
+	broadcastDefault := "BTCUSD,ETHUSD"
+	if cfg.App.AssetPhase == AssetPhaseFull {
+		broadcastDefault = "EURUSD,BTCUSD"
+	}
 	cfg.App.SignalSymbols = ParseSignalSymbols(
-		getEnv("SIGNAL_BROADCAST_SYMBOLS", "EURUSD,BTCUSD"),
+		getEnv("SIGNAL_BROADCAST_SYMBOLS", broadcastDefault),
 		cfg.App.SignalBroadcastSymbol,
 	)
+	cfg.Phase = NewCommunityPhaseRuntime()
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err

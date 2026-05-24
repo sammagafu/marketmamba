@@ -28,8 +28,27 @@ func (s *Service) catalog() PlatformCatalog {
 			Crypto:  []string{"BTCUSD", "ETHUSD"},
 		}
 	}
-	fx, idx, cry := s.cfg.SignalCatalog()
+	fx, idx, cry := s.cfg.PhasedSignalCatalog()
 	return PlatformCatalog{Forex: fx, Indexes: idx, Crypto: cry}
+}
+
+func (s *Service) fullCatalog() PlatformCatalog {
+	if s.cfg == nil {
+		return s.catalog()
+	}
+	fx, idx, cry := s.cfg.SignalCatalogFull()
+	return PlatformCatalog{Forex: fx, Indexes: idx, Crypto: cry}
+}
+
+func (s *Service) isFullCatalog() bool {
+	return s.cfg == nil || s.cfg.IsFullAssetCatalog()
+}
+
+func (s *Service) lockedHint() string {
+	if s.cfg == nil {
+		return ""
+	}
+	return s.cfg.App.CommunityLockedHint
 }
 
 func (s *Service) AvailableSymbols() []string {
@@ -51,6 +70,9 @@ func (s *Service) GetSignalTypes(userID int64) (models.SignalTypePreferences, er
 
 // SetSignalTypes enables asset classes; disables pairs outside selected types.
 func (s *Service) SetSignalTypes(userID int64, prefs models.SignalTypePreferences) error {
+	if err := s.validateTypesForPhase(prefs); err != nil {
+		return err
+	}
 	if !AtLeastOneType(prefs) {
 		return fmt.Errorf("enable at least one signal type: forex, indexes, or crypto")
 	}
@@ -84,8 +106,25 @@ func (s *Service) SetSignalTypes(userID int64, prefs models.SignalTypePreference
 
 func (s *Service) SeedDefaults(userID int64) error {
 	prefs := models.DefaultSignalTypes()
+	if !s.isFullCatalog() {
+		prefs = models.BitcoinPhaseSignalTypes()
+	}
 	_ = s.store.UpsertUserSignalPreferences(userID, prefs)
 	return s.SetPreferences(userID, defaultPrefs(s.catalog().FilterByTypes(prefs)))
+}
+
+func (s *Service) validateTypesForPhase(prefs models.SignalTypePreferences) error {
+	if s.isFullCatalog() {
+		return nil
+	}
+	if prefs.Forex || prefs.Indexes {
+		hint := s.lockedHint()
+		if hint == "" {
+			hint = "Forex and indexes are coming soon for the community — launch phase is Bitcoin and Ethereum."
+		}
+		return fmt.Errorf("%s", hint)
+	}
+	return nil
 }
 
 func defaultPrefs(symbols []string) []models.UserTradingPair {
@@ -106,6 +145,10 @@ func (s *Service) GetResponse(userID int64) (*models.TradingPairsResponse, error
 		return nil, err
 	}
 	cat := s.catalog()
+	displayCat := cat
+	if !s.isFullCatalog() {
+		displayCat = cat.FullCatalog(s.fullCatalog())
+	}
 	available, err := s.availableForUser(userID)
 	if err != nil {
 		return nil, err
@@ -131,8 +174,23 @@ func (s *Service) GetResponse(userID int64) (*models.TradingPairsResponse, error
 		SignalSymbols:    symbolsWithFlag(merged, true, false),
 		AutoTradeSymbols: symbolsWithFlag(merged, false, true),
 		SignalTypes:      prefs,
-		AssetGroups:      cat.AssetGroups(prefs),
+		AssetGroups:      displayCat.AssetGroups(prefs, s.isFullCatalog(), s.lockedHint()),
 	}, nil
+}
+
+// CommunityPhaseInfo returns user-facing community launch fields (no subscriber counts).
+func (s *Service) CommunityPhaseInfo() map[string]interface{} {
+	if s.cfg == nil {
+		return nil
+	}
+	copy := s.cfg.CommunityPhasePublic()
+	return map[string]interface{}{
+		"asset_phase":              copy.AssetPhase,
+		"asset_phase_unlocked":     copy.AssetPhaseUnlocked,
+		"community_phase_message":  copy.CommunityPhaseMessage,
+		"community_locked_hint":    copy.CommunityLockedHint,
+		"ai_training_note":         copy.AITrainingNote,
+	}
 }
 
 func mergeAvailable(available []string, pairs []models.UserTradingPair) []models.UserTradingPair {

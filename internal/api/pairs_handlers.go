@@ -7,6 +7,19 @@ import (
 	"forex-bot/internal/models"
 )
 
+func writeTradingPairsResponse(w http.ResponseWriter, s *Server, resp *models.TradingPairsResponse) {
+	out := map[string]interface{}{}
+	if b, err := json.Marshal(resp); err == nil {
+		_ = json.Unmarshal(b, &out)
+	}
+	if s.pairSvc != nil {
+		for k, v := range s.pairSvc.CommunityPhaseInfo() {
+			out[k] = v
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) handleTradingPairsGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -22,7 +35,7 @@ func (s *Server) handleTradingPairsGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeTradingPairsResponse(w, s, resp)
 }
 
 func (s *Server) handleTradingPairsPut(w http.ResponseWriter, r *http.Request) {
@@ -63,5 +76,5 @@ func (s *Server) handleTradingPairsPut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeTradingPairsResponse(w, s, resp)
 }

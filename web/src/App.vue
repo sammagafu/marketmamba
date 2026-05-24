@@ -87,11 +87,21 @@ function onBrokerWizardMessage(m) {
   messageOk.value = m.ok
 }
 
+function maybeShowCommunityUnlock() {
+  const cfg = config.value
+  if (!cfg?.asset_phase_unlocked || !cfg?.community_unlock_message) return
+  if (localStorage.getItem('mm_community_unlock_seen') === '1') return
+  localStorage.setItem('mm_community_unlock_seen', '1')
+  message.value = cfg.community_unlock_message
+  messageOk.value = true
+}
+
 async function refresh() {
   if (!loggedIn.value) return
   message.value = ''
   try {
     config.value = await fetch(`${API}/config`).then((r) => r.json())
+    maybeShowCommunityUnlock()
     const me = await api('/auth/me')
     applyProfile({ role, isAdmin, permissions, isBlocked, canTrade, tradeMessage }, me)
     telegramId.value = me.telegram_id || ''
@@ -331,6 +341,7 @@ onMounted(async () => {
     />
 
     <TradingPairs
+      :config="config"
       :can-trade="canTrade && !isBlocked"
       @message="(m) => { message = m.text; messageOk = m.ok }"
     />

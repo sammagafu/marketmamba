@@ -56,19 +56,30 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"binance_pay_enabled":    s.payments != nil && s.cfg.Payments.BinancePayAPIKey != "",
 		"signal_broadcast":       s.cfg.App.SignalBroadcastEnabled,
 		"signal_symbols":         s.cfg.SignalSymbols(),
-		"packages":               tier.PublicPackages(s.cfg.Payments.SubscriptionPriceUSDT, s.cfg.App.FreeTrialDays),
-		"pricing": map[string]interface{}{
-			"trial_days":          s.cfg.App.FreeTrialDays,
-			"price_usdt":          s.cfg.Payments.SubscriptionPriceUSDT,
-			"billing_period_days": s.cfg.Payments.SubscriptionDays,
-			"currency":            "USDT",
-			"payment_note":        "USDT via Binance only — no cards or Stripe.",
-		},
+		"packages":               tier.PublicPackages(s.cfg.Payments.SubscriptionPriceUSDT, s.cfg.App.FreeTrialDays, s.cfg.IsFullAssetCatalog()),
 	}
-	if stats, err := s.storage.GetUserStats(); err == nil && stats != nil {
-		payload["total_trades"] = stats.TotalTrades
-		payload["total_users"] = stats.TotalUsers
-		payload["open_trades"] = stats.OpenTrades
+	phase := s.cfg.CommunityPhasePublic()
+	payload["asset_phase"] = phase.AssetPhase
+	payload["asset_phase_unlocked"] = phase.AssetPhaseUnlocked
+	payload["community_phase_message"] = phase.CommunityPhaseMessage
+	payload["community_locked_hint"] = phase.CommunityLockedHint
+	payload["ai_training_note"] = phase.AITrainingNote
+	if phase.AssetPhaseUnlocked && phase.CommunityUnlockMessage != "" {
+		payload["community_unlock_message"] = phase.CommunityUnlockMessage
+	}
+	payload["pricing"] = map[string]interface{}{
+		"trial_days":          s.cfg.App.FreeTrialDays,
+		"price_usdt":          s.cfg.Payments.SubscriptionPriceUSDT,
+		"billing_period_days": s.cfg.Payments.SubscriptionDays,
+		"currency":            "USDT",
+		"payment_note":        "USDT via Binance only — no cards or Stripe.",
+	}
+	if s.storage != nil {
+		if stats, err := s.storage.GetUserStats(); err == nil && stats != nil {
+			payload["total_trades"] = stats.TotalTrades
+			payload["total_users"] = stats.TotalUsers
+			payload["open_trades"] = stats.OpenTrades
+		}
 	}
 	writeJSON(w, http.StatusOK, payload)
 }

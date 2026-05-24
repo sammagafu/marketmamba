@@ -23,12 +23,21 @@ type Notifier interface {
 
 // FormatMessage builds a Telegram-friendly signal alert.
 func FormatMessage(signal *models.TradeSignal) string {
+	return FormatMessageWithFooter(signal, "")
+}
+
+// FormatMessageWithFooter appends an optional phase line (e.g. community launch · BTC & ETH).
+func FormatMessageWithFooter(signal *models.TradeSignal, footer string) string {
 	if signal == nil {
 		return ""
 	}
 	reasonBlock := ""
 	if signal.Reason != "" {
 		reasonBlock = fmt.Sprintf("Setup: %s\n", signal.Reason)
+	}
+	footerBlock := ""
+	if footer != "" {
+		footerBlock = "\n_" + footer + "_\n"
 	}
 	return fmt.Sprintf(
 		"📡 *Market Mamba signal*\n\n"+
@@ -37,7 +46,7 @@ func FormatMessage(signal *models.TradeSignal) string {
 			"Strength: %.0f%%\n"+
 			"Stop loss: %.5f\n"+
 			"Take profit: %.5f\n"+
-			"R:R %.2f\n\n"+
+			"R:R %.2f%s\n\n"+
 			"_Not financial advice. Use /autostart for auto-execution._",
 		signal.Symbol,
 		signal.Type,
@@ -46,6 +55,7 @@ func FormatMessage(signal *models.TradeSignal) string {
 		signal.StopLoss,
 		signal.TakeProfit,
 		signal.RiskRewardRatio,
+		footerBlock,
 	)
 }
 
