@@ -3,35 +3,21 @@ package broker
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 )
 
 // Credentials is a flexible map of broker-specific secrets/settings.
 type Credentials map[string]string
 
+// NewFromProvider constructs a Broker for a technical adapter id (mock, oanda, metaapi).
 func NewFromProvider(provider string, creds Credentials) (Broker, error) {
-	switch provider {
-	case "mock":
-		bal := 10000.0
-		if creds != nil {
-			if s := creds["initial_balance"]; s != "" {
-				if v, err := strconv.ParseFloat(s, 64); err == nil && v > 0 {
-					bal = v
-				}
-			}
-		}
-		return NewMockBroker(bal), nil
-	case "oanda":
-		return NewOANDABroker(creds)
-	case "metaapi":
-		return NewMetaAPIBroker(creds)
-	case "alpaca":
-		return nil, fmt.Errorf("Alpaca adapter is not implemented yet — use Mock for now")
-	case "custom":
-		return nil, fmt.Errorf("custom REST adapter is not implemented yet — use Mock for now")
-	default:
+	a, ok := getAdapter(provider)
+	if !ok {
 		return nil, fmt.Errorf("unknown broker provider: %s", provider)
 	}
+	if a.Status != "live" {
+		return nil, fmt.Errorf("broker %q is not available yet — use mock (demo)", provider)
+	}
+	return a.New(creds)
 }
 
 func ParseCredentialsJSON(raw string) (Credentials, error) {
@@ -40,4 +26,10 @@ func ParseCredentialsJSON(raw string) (Credentials, error) {
 		return nil, err
 	}
 	return creds, nil
+}
+
+// IsLiveProvider reports whether users may save this technical provider.
+func IsLiveProvider(provider string) bool {
+	a, ok := getAdapter(provider)
+	return ok && a.Status == "live"
 }

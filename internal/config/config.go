@@ -45,7 +45,9 @@ type DatabaseConfig struct {
 }
 
 type BrokerConfig struct {
-	Provider string
+	Provider            string
+	EnabledBrokerBrands []string // empty = all brands from catalog
+	MetaAPISharedToken  string   // optional — clients skip MetaAPI token field
 }
 
 type RiskConfig struct {
@@ -103,7 +105,9 @@ func LoadConfig() (*Config, error) {
 			URL: getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/forexbot"),
 		},
 		Broker: BrokerConfig{
-			Provider: getEnv("BROKER_PROVIDER", "mock"),
+			Provider:            getEnv("BROKER_PROVIDER", "mock"),
+			EnabledBrokerBrands: parseCSV(getEnv("ENABLED_BROKER_BRANDS", "mock,deriv,exness,tickmill,any_mt")),
+			MetaAPISharedToken:  getEnv("METAAPI_SHARED_TOKEN", ""),
 		},
 		Risk: RiskConfig{
 			MaxRiskPerTrade:  parseFloat(getEnv("MAX_RISK_PER_TRADE", "0.005")),

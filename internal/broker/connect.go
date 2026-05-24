@@ -16,13 +16,31 @@ type ConnectionStore interface {
 }
 
 // SaveConnection validates credentials, encrypts them, and activates the broker for a user.
+// Use brandID non-empty to resolve a catalog brand (deriv, exness) to a technical adapter.
 func SaveConnection(store ConnectionStore, encryptionKey string, userID int64, provider, label string, creds Credentials) error {
+	return saveConnection(store, encryptionKey, userID, "", provider, label, creds)
+}
+
+// SaveBrandConnection saves using a user-facing brand id (deriv, exness, tickmill).
+func SaveBrandConnection(store ConnectionStore, encryptionKey string, userID int64, brandID, label string, creds Credentials) error {
+	return saveConnection(store, encryptionKey, userID, brandID, "", label, creds)
+}
+
+func saveConnection(store ConnectionStore, encryptionKey string, userID int64, brandID, provider, label string, creds Credentials) error {
+	if brandID != "" {
+		var err error
+		provider, creds, label, err = ResolveBrandConnection(brandID, label, creds)
+		if err != nil {
+			return err
+		}
+	}
 	if !IsLiveProvider(provider) {
 		return fmt.Errorf("broker %q is not available yet — use mock (demo)", provider)
 	}
 	if label == "" {
 		label = defaultLabel(provider, creds)
 	}
+	creds = ApplySharedMetaAPIToken(creds)
 	if err := ValidateCredentials(provider, creds); err != nil {
 		return err
 	}
@@ -42,6 +60,7 @@ func SaveConnection(store ConnectionStore, encryptionKey string, userID int64, p
 		Label:            label,
 		CredentialsEnc:   enc,
 		IsActive:         true,
+		IsPrimary:        true,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
@@ -67,27 +86,46 @@ func defaultLabel(provider string, creds Credentials) string {
 	}
 }
 
-// ValidateCredentials checks required fields from the broker registry.
+// ValidateCredentials checks required fields for a technical provider or brand.
 func ValidateCredentials(provider string, creds Credentials) error {
+	return validateCredentials(provider, "", creds)
+}
+
+// ValidateBrandCredentials validates credentials for a catalog brand.
+func ValidateBrandCredentials(brandID string, creds Credentials) error {
+	brand, ok := BrandByID(brandID)
+	if !ok {
+		return fmt.Errorf("unknown broker brand: %s", brandID)
+	}
+	_, merged, _, err := ResolveBrandConnection(brandID, "", creds)
+	if err != nil {
+		return err
+	}
+	if a, ok := getAdapter(brand.AdapterID); ok && a.Validate != nil {
+		if err := a.Validate(merged); err != nil {
+			return err
+		}
+	}
+	for _, f := range fieldsForBrand(*brand) {
+		if !f.Required {
+			continue
+		}
+		if merged[f.Key] == "" {
+			return fmt.Errorf("%s is required", f.Label)
+		}
+	}
+	return nil
+}
+
+func validateCredentials(provider, brandID string, creds Credentials) error {
 	if creds == nil {
 		creds = Credentials{}
 	}
-	if provider == "metaapi" {
-		return ValidateMetaAPICredentials(creds)
+	if brandID != "" {
+		return ValidateBrandCredentials(brandID, creds)
 	}
-	for _, bt := range SupportedBrokerTypes() {
-		if bt.ID != provider {
-			continue
-		}
-		for _, f := range bt.Fields {
-			if !f.Required {
-				continue
-			}
-			if creds[f.Key] == "" {
-				return fmt.Errorf("%s is required", f.Label)
-			}
-		}
-		return nil
+	if a, ok := getAdapter(provider); ok && a.Validate != nil {
+		return a.Validate(creds)
 	}
 	return fmt.Errorf("unknown broker provider: %s", provider)
 }

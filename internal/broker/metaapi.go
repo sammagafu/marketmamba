@@ -109,12 +109,12 @@ func (m *MetaAPIBroker) GetOpenPositions() ([]*models.Position, error) {
 		}
 		id := p.ID
 		if id == "" {
-			id = fmt.Sprintf("%s|%s", metaAPIToSymbol(p.Symbol), side)
+			id = fmt.Sprintf("%s|%s", MetaAPIToCanonical(p.Symbol), side)
 		}
 		out = append(out, &models.Position{
 			ID:           id,
 			BrokerID:     id,
-			Symbol:       metaAPIToSymbol(p.Symbol),
+			Symbol:       MetaAPIToCanonical(p.Symbol),
 			Type:         side,
 			Quantity:     p.Volume,
 			EntryPrice:   p.OpenPrice,
@@ -143,7 +143,7 @@ func (m *MetaAPIBroker) OpenMarketOrder(symbol, orderType string, quantity, stop
 		vol = 0.01
 	}
 	var lastErr error
-	for _, sym := range metaAPISymbolCandidates(symbol) {
+	for _, sym := range MetaAPISymbolCandidates(symbol) {
 		body := map[string]interface{}{
 			"actionType": action,
 			"symbol":     sym,
@@ -168,7 +168,7 @@ func (m *MetaAPIBroker) OpenMarketOrder(symbol, orderType string, quantity, stop
 		positions, err := m.GetOpenPositions()
 		if err == nil {
 			for _, p := range positions {
-				if strings.EqualFold(p.Symbol, metaAPIToSymbol(sym)) || strings.EqualFold(p.Symbol, symbol) {
+				if strings.EqualFold(p.Symbol, MetaAPIToCanonical(sym)) || strings.EqualFold(p.Symbol, symbol) {
 					return p, nil
 				}
 			}
@@ -176,15 +176,15 @@ func (m *MetaAPIBroker) OpenMarketOrder(symbol, orderType string, quantity, stop
 		return &models.Position{
 			ID:       resp.PositionID,
 			BrokerID: resp.PositionID,
-			Symbol:   metaAPIToSymbol(sym),
+			Symbol:   MetaAPIToCanonical(sym),
 			Type:     strings.ToUpper(orderType),
 			Quantity: vol,
 		}, nil
 	}
 	if lastErr != nil {
-		return nil, lastErr
+		return nil, ClassifyError("metaapi", lastErr)
 	}
-	return nil, fmt.Errorf("could not open order for symbol %s", symbol)
+	return nil, ClassifyError("metaapi", fmt.Errorf("could not open order for symbol %s", symbol))
 }
 
 func (m *MetaAPIBroker) ClosePosition(positionID string) error {
@@ -533,37 +533,6 @@ func metaAPICloudAccountID(creds Credentials) string {
 
 func isMetaAPICloudID(s string) bool {
 	return len(s) >= 32 && strings.Contains(s, "-")
-}
-
-func metaAPISymbolCandidates(symbol string) []string {
-	s := strings.ToUpper(strings.TrimSpace(symbol))
-	switch s {
-	case "EURUSD":
-		return []string{"frxEURUSD", "EURUSD", "EURUSDm"}
-	case "GBPUSD":
-		return []string{"frxGBPUSD", "GBPUSD"}
-	case "USDJPY":
-		return []string{"frxUSDJPY", "USDJPY"}
-	case "BTCUSD":
-		return []string{"cryBTCUSD", "BTCUSD"}
-	default:
-		if strings.HasPrefix(s, "FRX") || strings.HasPrefix(s, "CRY") {
-			return []string{s}
-		}
-		return []string{"frx" + s, s}
-	}
-}
-
-func metaAPIToSymbol(sym string) string {
-	s := strings.TrimSpace(sym)
-	low := strings.ToLower(s)
-	if strings.HasPrefix(low, "frx") && len(s) > 3 {
-		return strings.ToUpper(s[3:])
-	}
-	if strings.HasPrefix(low, "cry") && len(s) > 3 {
-		return strings.ToUpper(s[3:])
-	}
-	return strings.ToUpper(s)
 }
 
 func cloneCredentials(c Credentials) Credentials {

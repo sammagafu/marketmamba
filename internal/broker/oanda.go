@@ -201,11 +201,11 @@ func (o *OANDABroker) CloseAllPositions() error {
 }
 
 func (o *OANDABroker) ModifyStopLoss(positionID string, newStopLoss float64) error {
-	return fmt.Errorf("OANDA modify stop loss: use OANDA client — not implemented")
+	return NewBrokerError(ErrValidation, "OANDA stop-loss modify is not supported in this release — close and reopen the trade", nil)
 }
 
 func (o *OANDABroker) ModifyTakeProfit(positionID string, newTakeProfit float64) error {
-	return fmt.Errorf("OANDA modify take profit: use OANDA client — not implemented")
+	return NewBrokerError(ErrValidation, "OANDA take-profit modify is not supported in this release — close and reopen the trade", nil)
 }
 
 func (o *OANDABroker) GetPositionByID(positionID string) (*models.Position, error) {
@@ -289,7 +289,7 @@ func (o *OANDABroker) do(req *http.Request, out interface{}) error {
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("OANDA API %s %s: %s", req.Method, req.URL.Path, truncate(string(data), 300))
+		return ClassifyError("oanda", fmt.Errorf("OANDA API %s %s: %s", req.Method, req.URL.Path, truncate(string(data), 300)))
 	}
 	if out == nil {
 		return nil

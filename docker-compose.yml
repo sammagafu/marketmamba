@@ -67,6 +67,8 @@ services:
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://marketmamba.kkooapp.co.tz}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://marketmamba.kkooapp.co.tz}
       BROKER_ENCRYPTION_KEY: ${BROKER_ENCRYPTION_KEY:?Set BROKER_ENCRYPTION_KEY in .env}
+      ENABLED_BROKER_BRANDS: ${ENABLED_BROKER_BRANDS:-mock,deriv,exness,tickmill,any_mt}
+      METAAPI_SHARED_TOKEN: ${METAAPI_SHARED_TOKEN:-}
       PUBLIC_MODE: ${PUBLIC_MODE:-true}
       FREE_TRIAL_DAYS: ${FREE_TRIAL_DAYS:-5}
       TELEGRAM_ADMIN_USER_IDS: ${TELEGRAM_ADMIN_USER_IDS:?Set TELEGRAM_ADMIN_USER_IDS in .env}

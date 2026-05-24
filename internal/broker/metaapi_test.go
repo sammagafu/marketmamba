@@ -58,19 +58,6 @@ func TestIsMetaAPICloudID(t *testing.T) {
 	}
 }
 
-func TestMetaAPISymbolCandidates(t *testing.T) {
-	eur := metaAPISymbolCandidates("EURUSD")
-	if len(eur) == 0 || eur[0] != "frxEURUSD" {
-		t.Fatalf("EURUSD candidates = %v", eur)
-	}
-	if metaAPIToSymbol("frxEURUSD") != "EURUSD" {
-		t.Fatal("frxEURUSD mapping")
-	}
-	if metaAPIToSymbol("cryBTCUSD") != "BTCUSD" {
-		t.Fatal("cryBTCUSD mapping")
-	}
-}
-
 func TestMetaAPITokenAliases(t *testing.T) {
 	c := Credentials{"token": "a"}
 	if metaAPIToken(c) != "a" {

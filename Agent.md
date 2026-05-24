@@ -15,6 +15,8 @@ Logos: `web/src/assets/images/` (`Logo-landscape.svg`, `Logo-potrait.svg`, `favc
 | [README.md](./README.md) | Project overview |
 | [docs/HOW_WE_TRADE.md](./docs/HOW_WE_TRADE.md) | Signals, indicators, risk — aligns with landing copy |
 | [docs/MINI_APP.md](./docs/MINI_APP.md) | Telegram Mini App, 5-day trial, 10 USDT/month Binance |
+| [docs/BROKER_CONNECT.md](./docs/BROKER_CONNECT.md) | Connect Deriv, Exness, Tickmill, OANDA, Mock |
+| [docs/SUBSCRIPTION_TIERS.md](./docs/SUBSCRIPTION_TIERS.md) | Plan limits: accounts, signals, long/short trades |
 
 ## Quick VPS commands
 
