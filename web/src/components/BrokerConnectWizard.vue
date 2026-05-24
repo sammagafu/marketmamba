@@ -138,9 +138,11 @@ const docsUrl = computed(() => {
 
 <template>
   <section class="card wide broker-wizard card-bull">
-    <h2>Connect broker</h2>
-    <p class="muted disclaimer">
-      Market Mamba is not a broker. You connect your own account. Credentials are encrypted on the server.
+    <p class="section-eyebrow">Broker connection</p>
+    <h2 class="section-title">Link your trading account</h2>
+    <p class="section-lead disclaimer">
+      Market Mamba is not a broker. Connect the MT4/MT5 account you already hold at Deriv, Exness, Tickmill,
+      or any supported server. Credentials are encrypted at rest.
     </p>
     <p v-if="connection" class="ok">
       Connected: <strong>{{ connection.label || connection.provider }}</strong>
@@ -148,7 +150,7 @@ const docsUrl = computed(() => {
     </p>
 
     <div v-if="step === 1" class="wizard-step">
-      <h3>1. Choose your broker</h3>
+      <h3 class="wizard-step-title">Step 1 · Select broker</h3>
       <p class="metaapi-intro">
         <template v-if="metaapiSharedToken">
           Enter your broker <strong>MT login</strong>, <strong>password</strong>, and
@@ -161,7 +163,7 @@ const docsUrl = computed(() => {
         </template>
       </p>
 
-      <h4 v-if="metaapiBrands.length" class="group-title">MT brokers (MetaAPI)</h4>
+      <h4 v-if="metaapiBrands.length" class="group-title">Live MT accounts (MetaAPI)</h4>
       <div v-if="metaapiBrands.length" class="brand-grid">
         <button
           v-for="b in metaapiBrands"
@@ -179,7 +181,7 @@ const docsUrl = computed(() => {
         </button>
       </div>
 
-      <h4 v-if="otherBrands.length" class="group-title">Demo &amp; other</h4>
+      <h4 v-if="otherBrands.length" class="group-title">Demo &amp; alternatives</h4>
       <div v-if="otherBrands.length" class="brand-grid">
         <button
           v-for="b in otherBrands"
@@ -199,7 +201,7 @@ const docsUrl = computed(() => {
     </div>
 
     <div v-else-if="step === 2 && selectedBrand" class="wizard-step">
-      <h3>2. Enter credentials — {{ selectedBrand.display_name }}</h3>
+      <h3 class="wizard-step-title">Step 2 · Credentials · {{ selectedBrand.display_name }}</h3>
       <button type="button" class="link-back" @click="step = 1">← Change broker</button>
 
       <p v-if="selectedBrand.uses_metaapi" class="metaapi-step">
@@ -258,7 +260,7 @@ const docsUrl = computed(() => {
     </div>
 
     <div v-else-if="step === 3" class="wizard-step">
-      <h3>3. Ready</h3>
+      <h3 class="wizard-step-title">Step 3 · Confirm connection</h3>
       <p class="ok">Broker connected. Try <code>/balance</code> and <code>/autostart</code> in Telegram.</p>
       <button type="button" class="btn-secondary" @click="step = 1">Connect a different broker</button>
     </div>
@@ -271,7 +273,17 @@ const docsUrl = computed(() => {
 
 <style scoped>
 .broker-wizard .disclaimer {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.wizard-step-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.wizard-step {
+  margin-top: 1.25rem;
 }
 .brand-grid {
   display: grid;

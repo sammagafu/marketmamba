@@ -1,32 +1,32 @@
 /**
  * Public copy for how Market Mamba trades — keep aligned with
- * internal/trading/signal_generator.go, internal/risk, and user defaults.
+ * internal/trading, internal/risk, and user defaults.
  */
 
 export const TRADE_PIPELINE = [
   {
     step: '01',
-    title: 'Scan & filter',
+    title: 'Scan markets',
     body:
-      'We watch major pairs and run each setup through spread, volatility (ATR), EMA trend alignment, and RSI bands before a signal is even considered.',
+      'Major pairs are screened for spread, volatility (ATR), EMA trend alignment, and RSI — before any setup is considered.',
   },
   {
     step: '02',
-    title: 'Qualify the signal',
+    title: 'Qualify setups',
     body:
-      'Only BUY/SELL ideas with defined stop loss and take profit, minimum strength, and a risk–reward ratio that meets platform rules are qualified for broadcast or auto-execution.',
+      'Only trades with stop loss, take profit, minimum strength, and acceptable risk–reward pass through to broadcast or auto-execution.',
   },
   {
     step: '03',
-    title: 'Size & execute',
+    title: 'Size & route',
     body:
-      'Lot size is calculated from your account balance and risk-per-trade settings. Orders go to your connected broker with SL and TP attached; retries handle transient broker errors.',
+      'Position size follows your risk-per-trade setting. Orders are sent to your connected broker with SL and TP attached.',
   },
   {
     step: '04',
-    title: 'Monitor & log',
+    title: 'Monitor & record',
     body:
-      'Open positions are checked against TP and SL. Every open and close is written to your trade log with entry, exit, P/L, and closure reason for a full audit trail.',
+      'Open trades are tracked against TP and SL. Every fill is logged with entry, exit, P/L, and reason — for a clear audit trail.',
   },
 ]
 
@@ -35,25 +35,25 @@ export const INDICATORS = [
     tag: 'Trend',
     name: 'EMA 20 · 50 · 200',
     detail:
-      'Stacked moving averages define strong uptrend/downtrend and pullback entries near EMA20 or EMA50.',
+      'Stacked averages define trend direction and pullback zones near EMA 20 or 50.',
   },
   {
     tag: 'Momentum',
     name: 'RSI',
     detail:
-      'Avoids extreme overbought/oversold zones (roughly below 20 or above 80) so scalps are not taken into exhausted moves.',
+      'Filters exhausted moves by avoiding extreme overbought and oversold readings.',
   },
   {
     tag: 'Volatility',
     name: 'ATR',
     detail:
-      'Filters dead markets and sets stop loss (~1× ATR) and take profit (ATR × your minimum risk–reward).',
+      'Skips flat markets; helps set stop distance and take-profit versus your minimum R:R.',
   },
   {
-    tag: 'Execution',
+    tag: 'Cost',
     name: 'Spread',
     detail:
-      'Signals are rejected when spread is too wide (~3 pips on majors) so entries are not eaten by cost.',
+      'Wide spreads on majors are rejected so execution cost does not erode the edge.',
   },
 ]
 
@@ -61,53 +61,58 @@ export const RISK_CONTROLS = [
   {
     name: 'Risk per trade',
     value: '0.5%',
-    detail: 'Default cap on account balance risked per position (configurable per user).',
+    detail: 'Default maximum account risk per position (adjustable per user).',
   },
   {
-    name: 'Daily loss limit',
+    name: 'Daily loss cap',
     value: '2%',
-    detail: 'Trading stops for the day once realized loss hits this share of balance.',
+    detail: 'Automation pauses when realized daily loss reaches this level.',
   },
   {
-    name: 'Open positions',
+    name: 'Open exposure',
     value: '2 max',
-    detail: 'Limits concurrent exposure so the book does not stack unchecked.',
+    detail: 'Caps concurrent positions so risk cannot stack without limit.',
   },
   {
-    name: 'Trades per day',
+    name: 'Daily trade count',
     value: '10 max',
-    detail: 'Prevents over-trading in choppy sessions.',
+    detail: 'Reduces over-trading in noisy sessions.',
   },
   {
-    name: 'Risk–reward',
+    name: 'Minimum R:R',
     value: '≥ 1:1',
-    detail: 'Every signal must meet minimum reward vs. stop distance before execution.',
+    detail: 'Reward must justify stop distance before any order is placed.',
   },
   {
-    name: 'Pause & subscription',
-    value: 'You control',
+    name: 'Your control',
+    value: 'Pause anytime',
     detail:
-      'Pause automation anytime. Active subscription (or trial) is required; admins can block accounts that breach policy.',
+      'Turn automation off in Telegram or the dashboard. Active membership required; plan quotas apply monthly.',
   },
 ]
 
 export const SIGNAL_SOURCES = [
   {
-    title: 'Qualified Telegram signals',
+    title: 'Our signals, not channel copy',
     body:
-      'Pick your pairs (EURUSD, BTCUSD, …) in the dashboard or via /pairs. You only receive signals and TP/SL updates for pairs you enable.',
+      'Market Mamba does not mirror third-party Telegram VIP channels. You receive qualified setups from our engine, scoped to pairs you enable and limits on your plan.',
   },
   {
-    title: 'Your broker, your book',
+    title: 'Your broker, your capital',
     body:
-      'Connect a supported broker (or mock for testing). Execution and balances stay on your account; Market Mamba orchestrates rules and logging.',
+      'Connect Deriv, Exness, Tickmill, or any MT4/MT5 server via MetaAPI. We are not a broker — funds and execution remain with you.',
   },
   {
-    title: 'Automation you toggle',
+    title: 'Automation on your terms',
     body:
-      'Turn auto-trading on from the dashboard or Telegram (/autostart). When off, you still get signals and can manage trades manually.',
+      'Enable auto-trading when you are ready. Hard limits apply: per-trade risk, daily loss, open trades, and monthly tier quotas.',
+  },
+  {
+    title: 'Simple USDT billing',
+    body:
+      'Start on a free trial, then pay in USDT through Binance in the Telegram app. Pro and team plans — contact us directly.',
   },
 ]
 
 export const RISK_DISCLAIMER =
-  'Forex and CFD trading carry substantial risk of loss. Past performance and logged trade counts do not guarantee future results. Only trade with capital you can afford to lose.'
+  'Forex and CFD trading involve substantial risk of loss. Past results and platform statistics do not guarantee future performance. Only risk capital you can afford to lose. Market Mamba is not a broker and does not provide investment advice.'

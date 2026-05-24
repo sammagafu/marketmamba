@@ -1,363 +1,187 @@
 # Market Mamba
 
-A production-ready Go backend for automated forex trading with Telegram bot control, risk management, and broker integration.
+**Controlled forex automation on Telegram** — built-in risk limits, qualified signals, and execution on **the broker you already use** (Deriv, Exness, Tickmill, or any MT4/MT5 via [MetaAPI](https://metaapi.cloud/)).
 
-## ⚠️ Risk Disclaimer
+Market Mamba is **not** a broker and **does not** copy trades from third-party Telegram signal channels. It runs **your** rules on **your** account.
 
-**This bot is for educational and testing purposes only.** Forex trading carries substantial risk of loss. Do not use real account credentials without thorough testing. Always use stop losses and proper risk management. The developers are not responsible for trading losses.
+## What you get
 
-## Features
+| Capability | Description |
+|------------|-------------|
+| **Controlled automation** | Qualified signals, position sizing from risk %, SL/TP on every trade |
+| **Risk limits** | Per-trade risk, daily loss cap, max open trades, tier quotas (signals/trades/brokers) |
+| **Any MT broker** | Connect via MetaAPI — brand presets or **Any MT broker** with your server name |
+| **Telegram + web** | Bot commands, Mini App dashboard, web connect wizard |
+| **Subscriptions** | Free trial, then **USDT via Binance** (no cards / no Stripe) |
 
-### Core Functionality
-- 🤖 Telegram bot integration with command control
-- 📊 Real-time position monitoring
-- 💰 Account balance and equity tracking
-- 🛡️ Comprehensive risk management system
-- 📱 Mobile-friendly Telegram commands
-- 📈 Daily trading statistics
-- 🔒 User ID-based access control
-- 📝 Command audit logging
+## Risk disclaimer
 
-### Risk Management
-- Max risk per trade percentage
-- Daily loss limit enforcement
-- Maximum concurrent open trades
-- Daily trade count limits
-- Risk-reward ratio validation
-- Stop loss requirement enforcement
-- Automatic trading pause on daily loss hit
+Forex trading carries substantial risk of loss. This software is provided for educational and operational use. Test on **demo (mock)** before live credentials. The operators are not responsible for trading losses.
 
-### Architecture
-- Clean architecture with dependency injection
-- Interface-based broker abstraction (easy to integrate OANDA, cTrader, MT5)
-- PostgreSQL storage layer
-- Comprehensive logging
-- Docker containerization
-- Environment-based configuration
-
-## Project Structure
-
-```
-forex-bot/
-├── cmd/
-│   └── server/
-│       └── main.go                 # Application entry point
-├── internal/
-│   ├── broker/
-│   │   └── broker.go              # Broker interface & mock implementation
-│   ├── config/
-│   │   └── config.go              # Configuration management
-│   ├── logger/
-│   │   └── logger.go              # Logging utilities
-│   ├── models/
-│   │   └── models.go              # Data models
-│   ├── risk/
-│   │   ├── risk.go                # Risk validation logic
-│   │   └── risk_test.go           # Unit tests
-│   ├── storage/
-│   │   └── storage.go             # Database operations
-│   ├── strategy/
-│   │   └── scalping.go            # Strategy placeholders
-│   ├── telegram/
-│   │   └── telegram.go            # Telegram bot handler
-│   └── utils/
-│       └── utils.go               # Utility functions
-├── migrations/
-│   └── 001_init_schema.sql        # Database schema
-├── .env.example                    # Environment variables template
-├── Dockerfile                      # Container image
-├── docker-compose.yml              # Container orchestration
-├── go.mod & go.sum                # Go dependencies
-└── README.md                       # This file
-```
-
-## Prerequisites
-
-- Go 1.21+
-- PostgreSQL 12+
-- Docker & Docker Compose (optional)
-- Telegram Bot Token (from BotFather)
-
-## Quick Start
-
-### 1. Clone and Setup
-
-```bash
-cd forex-bot
-cp .env.example .env
-```
-
-### 2. Configure Environment Variables
-
-Edit `.env` with your settings:
-
-```bash
-# Get Telegram Bot Token from @BotFather on Telegram
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-
-# Your Telegram User ID (get from @userinfobot)
-TELEGRAM_ALLOWED_USER_IDS=123456789
-
-# Database URL
-DATABASE_URL=postgres://user:password@localhost:5432/forexbot
-
-# Risk settings (examples)
-MAX_RISK_PER_TRADE=0.005        # 0.5% per trade
-MAX_DAILY_LOSS=0.02              # 2% daily max loss
-MAX_OPEN_TRADES=2                # Max 2 concurrent trades
-MAX_TRADES_PER_DAY=10            # Max 10 trades/day
-```
-
-### 3. Docker Setup (Recommended)
-
-```bash
-# Start database and app
-docker-compose up -d
-
-# Check logs
-docker-compose logs -f app
-
-# Run migrations
-docker-compose exec app psql -U forexbot -d forexbot -f migrations/001_init_schema.sql
-```
-
-### 4. Local Setup (Without Docker)
-
-```bash
-# Install dependencies
-go mod download
-
-# Create PostgreSQL database
-createdb forexbot
-
-# Run migrations
-psql -U forexbot -d forexbot -f migrations/001_init_schema.sql
-
-# Run the application
-go run cmd/server/main.go
-```
-
-## Telegram Bot Commands
-
-### Status & Information
-- `/start` - Show help and available commands
-- `/status` - Bot and trading status
-- `/balance` - Account balance and equity
-- `/positions` - List all open positions
-- `/dailyreport` - Daily trading statistics
-- `/risk` - Display risk settings
-
-### Trade Management
-- `/open EURUSD BUY 1.0 1.0900 1.1000` - Open trade
-  - Format: `/open <SYMBOL> <BUY|SELL> <QUANTITY> <STOPLOSS> <TAKEPROFIT>`
-- `/close <POSITION_ID>` - Close specific position
-- `/closeall` - Close all open positions
-
-### Bot Control
-- `/pause` - Pause trading (manual control only)
-- `/resume` - Resume trading
-
-## Configuration Details
-
-### Risk Management Settings
-
-```go
-MaxRiskPerTrade  = 0.005    // Risk max 0.5% per trade
-MaxDailyLoss     = 0.02     // Stop trading after 2% daily loss
-MaxOpenTrades    = 2        // Never have more than 2 open trades
-MaxTradesPerDay  = 10       // Maximum 10 trades per calendar day
-RiskRewardRatio  = 1.0      // Minimum reward must be >= risk
-```
-
-### Database Schema
-
-The system stores:
-- **trades** - Historical trade records
-- **positions** - Open trading positions
-- **accounts** - Account balance and equity
-- **risk_settings** - User risk configuration
-- **daily_stats** - Daily performance metrics
-- **bot_states** - Bot pause/resume state
-- **command_logs** - Audit trail of commands
-
-## Broker Integration
-
-### Current Implementation
-- **Mock Broker** - For development and testing
-
-### Adding a New Broker
-
-1. Implement the `Broker` interface in `internal/broker/broker.go`:
-
-```go
-type Broker interface {
-    GetBalance() (float64, error)
-    GetEquity() (float64, error)
-    GetOpenPositions() ([]*models.Position, error)
-    OpenMarketOrder(symbol, orderType string, quantity, stopLoss, takeProfit float64) (*models.Position, error)
-    ClosePosition(positionID string) error
-    CloseAllPositions() error
-    ModifyStopLoss(positionID string, newStopLoss float64) error
-    ModifyTakeProfit(positionID string, newTakeProfit float64) error
-}
-```
-
-2. Create a new broker package (e.g., `internal/broker/oanda.go`)
-
-3. Update `cmd/server/main.go` to instantiate your broker:
-
-```go
-var b broker.Broker
-if cfg.Broker.Provider == "oanda" {
-    b, err = broker.NewOandaBroker(cfg.OandaConfig)
-    // ...
-}
-```
-
-## Testing
-
-### Run Unit Tests
-```bash
-go test ./internal/risk -v
-```
-
-### Test Mock Trading
-1. Message your bot with `/start`
-2. Open a position: `/open EURUSD BUY 1.0 1.0900 1.1000`
-3. View positions: `/positions`
-4. Close position: `/close <POSITION_ID>`
-
-## VPS Deployment
-
-**Full guide:** [VPS_DEPLOY.md](./VPS_DEPLOY.md) · **Operator index:** [Agent.md](./Agent.md)
+## Quick start
 
 ```bash
 git clone git@github.com:sammagafu/marketmamba.git forex-bot
 cd forex-bot
-cp .env.example .env && nano .env   # TELEGRAM_BOT_TOKEN, WEB_API_KEY, secrets, ADMIN_EMAIL
-
-make vps-up
-make vps-migrate
-make vps-seed-admin    # email admin login (ADMIN_EMAIL / ADMIN_PASSWORD in .env)
-
-make vps-logs
+cp .env.example .env   # edit TELEGRAM_BOT_TOKEN, DATABASE_URL, secrets
 ```
 
-Site: `https://marketmamba.kkooapp.co.tz` — nginx example in `deploy/nginx-marketmamba.conf.example`.
+### Docker (recommended)
 
-**Admin login:** email + password on the dashboard, or Telegram `/admin` commands (same Telegram ID in `TELEGRAM_ADMIN_USER_IDS`).
-
-## Code Quality
-
-### Project Features
-- ✅ Error handling with context
-- ✅ Structured logging
-- ✅ Unit tests for risk module
-- ✅ Interface-based design
-- ✅ Configuration from environment
-- ✅ SQL injection prevention (parameterized queries)
-- ✅ Concurrent position tracking
-- ✅ Comprehensive audit logging
-
-### Build & Run
 ```bash
-# Download dependencies
-go mod download
-
-# Build binary
+docker compose up -d
+# Apply migrations (001–009) — see make vps-migrate or run SQL under migrations/
+make web-build         # embed Vue dashboard in Go binary
 go build -o forex-bot cmd/server/main.go
-
-# Run with custom env file
-source .env && ./forex-bot
 ```
 
-## Future Enhancements
+### Local dev
 
-### Automated Trading
-- [ ] Technical analysis integration (ATR, EMA, RSI)
-- [ ] Scalping strategy implementation
-- [ ] News filter integration
-- [ ] Session-based trading rules
-- [ ] Spread monitoring
-
-### Broker Support
-- [ ] OANDA REST API v20
-- [ ] cTrader REST API
-- [ ] MetaTrader 5 SDK
-- [ ] IB (Interactive Brokers)
-
-### Monitoring
-- [ ] REST API for webhooks
-- [ ] Discord bot notifications
-- [ ] Slack integration
-- [ ] Email alerts
-- [ ] Grafana dashboards
-
-### Advanced Features
-- [ ] Portfolio optimization
-- [ ] Multi-account support
-- [ ] Strategy backtesting engine
-- [ ] Machine learning predictions
-- [ ] Trailing stop implementation
-
-## Troubleshooting
-
-### Database Connection Error
 ```bash
-# Check PostgreSQL is running
-docker-compose ps
-
-# Check connection string in .env
-DATABASE_URL=postgres://user:password@localhost:5432/forexbot
+go mod download
+createdb forexbot
+# Run all migrations in migrations/ in order
+go run cmd/server/main.go
 ```
 
-### Telegram Bot Not Responding
+Web UI dev server: `cd web && npm install && npm run dev` (API on `HTTP_PORT`, default 8090).
+
+## Configuration (highlights)
+
+```env
+# Telegram
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=market_mamba_bot
+PUBLIC_SITE_URL=https://your-domain.example
+
+# Brokers (live traders)
+ENABLED_BROKER_BRANDS=mock,deriv,exness,tickmill,any_mt
+METAAPI_SHARED_TOKEN=          # optional — users skip MetaAPI token field
+BROKER_ENCRYPTION_KEY=         # required in production (32+ chars)
+
+# Risk (defaults for new users)
+MAX_RISK_PER_TRADE=0.005
+MAX_DAILY_LOSS=0.02
+MAX_OPEN_TRADES=2
+MAX_TRADES_PER_DAY=10
+
+# Subscriptions — USDT only
+SUBSCRIPTION_REQUIRED=true
+FREE_TRIAL_DAYS=5
+SUBSCRIPTION_PRICE_USDT=10
+SUBSCRIPTION_DAYS=30
+SUBSCRIPTION_CONTACT=Pay in USDT via Binance only (no cards). Pro plans? Contact us on Telegram.
+CONTACT_US_URL=https://t.me/your_bot
+CONTACT_US_LABEL=Contact us
+VALUE_PROPOSITION=Controlled automation with built-in risk limits — connect the broker you already use.
+
+# Binance USDT checkout (Mini App)
+BINANCE_PAY_API_KEY=
+BINANCE_PAY_SECRET=
+```
+
+Full template: [`.env.example`](./.env.example).
+
+## Broker connection
+
+| Brand | Path |
+|-------|------|
+| **Demo** | Telegram `/broker connect` or web wizard → Mock |
+| **Deriv / Exness / Tickmill** | Web **Connect broker** → MetaAPI token + MT login, password, **exact server name** |
+| **Any MT broker** | Same wizard — enter your broker’s MT server (e.g. IC Markets, Pepperstone) |
+
+Guide: [`docs/BROKER_CONNECT.md`](./docs/BROKER_CONNECT.md)
+
+First MetaAPI deploy often takes **1–3 minutes**. Market Mamba is not a broker — funds stay at your broker.
+
+## Subscription tiers
+
+Plans limit broker accounts, signals per month, and long/short auto-trades. See [`docs/SUBSCRIPTION_TIERS.md`](./docs/SUBSCRIPTION_TIERS.md).
+
+| Plan | Typical use |
+|------|-------------|
+| **trial** | Auto on `/start` |
+| **monthly** | USDT payment via Mini App / Binance |
+| **pro / manual** | Admin activate — contact operator |
+
+**Payments:** USDT via Binance only. No Stripe or card billing in-app.
+
+## Telegram commands (traders)
+
+| Command | Purpose |
+|---------|---------|
+| `/start` | Register, trial, help |
+| `/subscribe` | Plans & USDT payment info |
+| `/myplan` | Current subscription |
+| `/broker connect web` | Link to connect wizard |
+| `/pairs` | Signal & auto-trade symbols |
+| `/balance` `/positions` `/trades` | Account view |
+| `/open` `/close` | Manual trades |
+| `/autostart` `/autostop` | Automation toggle |
+| `/analyze SYMBOL` | Sniper decision (TAKE/SKIP/WAIT) |
+
+Admins: `/admin activate`, signal broadcast, user block — see [`Agent.md`](./Agent.md).
+
+## How trading works
+
+1. **Scan & filter** — EMA stack, RSI, ATR, spread checks  
+2. **Qualify** — SL/TP, strength, minimum R:R  
+3. **Size & execute** — Risk-based lots on your connected broker  
+4. **Monitor & log** — TP/SL, per-user trade history  
+
+Details: [`docs/HOW_WE_TRADE.md`](./docs/HOW_WE_TRADE.md)
+
+## Project layout
+
+```
+cmd/server/           # Entry point
+internal/broker/      # Adapters, catalog, MetaAPI, connect flow
+internal/tier/        # Plan limits & usage
+internal/trading/     # Coordinator, executor, monitor
+internal/signals/     # Broadcast & qualification
+internal/telegram/    # Bot handlers
+internal/api/         # REST + embedded web/dist
+web/                  # Vue dashboard & Mini App
+migrations/           # 001–009 PostgreSQL schema
+docs/                 # Operator & user guides
+```
+
+## Testing
+
 ```bash
-# Verify bot token
-echo $TELEGRAM_BOT_TOKEN
-
-# Check logs
-docker-compose logs app | grep -i telegram
-
-# Test token with curl
-curl https://api.telegram.org/bot<TOKEN>/getMe
+go test ./...
+make web-build && go build ./cmd/server/
 ```
 
-### High Memory Usage
-- Reduce `MAX_OPEN_TRADES`
-- Implement position cleanup jobs
-- Check for goroutine leaks in logs
+## Production deploy
 
-## Security Considerations
+**Guides:** [VPS_DEPLOY.md](./VPS_DEPLOY.md) · [Agent.md](./Agent.md) · [WEB_DEPLOY.md](./WEB_DEPLOY.md)
 
-1. **Never commit .env file** - Use `.env.example` as template
-2. **Use strong database passwords** - Change default in docker-compose
-3. **Restrict Telegram access** - Only add your user ID(s)
-4. **Enable HTTPS** - Use reverse proxy (nginx) in production
-5. **Audit logs** - Regularly review command logs
-6. **Update dependencies** - Run `go get -u` periodically
-7. **Secure VPS** - Firewall, SSH key-only access, fail2ban
-8. **No credential logging** - API keys never logged or stored
+```bash
+make vps-up
+make vps-migrate    # applies migrations
+make vps-seed-admin
+```
 
-## Support & Contributing
+After deploy, run migrations **008** (`broker multi-account`) and **009** (`tier usage`) if not already applied.
 
-For issues or contributions:
-1. Check existing issues
-2. Create detailed bug reports with logs
-3. Include environment info (Go version, OS)
-4. Test changes against mock broker
+## What Market Mamba does *not* do
+
+- **Copy external Telegram signal channels** (no channel listener / AI copier)  
+- **Hold client funds** (execution is at the user’s broker)  
+- **Accept card/Stripe payments** (USDT via Binance + manual admin activate)
+
+## Security
+
+- Encrypt broker credentials (`BROKER_ENCRYPTION_KEY`)  
+- Never commit `.env`  
+- Restrict `TELEGRAM_ADMIN_USER_IDS`  
+- Use HTTPS in production (Caddy/nginx — see deploy docs)
 
 ## License
 
-This project is provided as-is for educational purposes.
-
-## Additional Resources
-
-- [Telegram Bot API Documentation](https://core.telegram.org/bots/api)
-- [Go Database/SQL](https://golang.org/pkg/database/sql/)
-- [Docker Compose Reference](https://docs.docker.com/compose/compose-file/)
-- [Forex Trading Best Practices](https://www.investopedia.com/articles/forex/)
+Provided as-is. See repository for terms.
 
 ---
 
-**Remember:** Always start with small position sizes, test thoroughly with a demo account, and never risk more than you can afford to lose.
+**Support:** set `CONTACT_US_URL` (defaults to `https://t.me/<bot username>`). Pro, teams, or payment help → contact operator on Telegram.

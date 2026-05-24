@@ -70,6 +70,9 @@ type AppConfig struct {
 	SubscriptionRequired        bool
 	FreeTrialDays               int
 	SubscriptionContactMessage  string
+	ValueProposition            string // marketing line: automation + risk + any broker
+	ContactUsURL                string // Telegram, email, or support page
+	ContactUsLabel              string
 	WebSessionSecret            string
 	WebSessionTTLDays           int
 	PublicSiteURL               string // https://marketmamba.kkooapp.co.tz — Telegram Login callback origin
@@ -127,7 +130,10 @@ func LoadConfig() (*Config, error) {
 			PublicMode:                 getEnv("PUBLIC_MODE", "true") == "true",
 			SubscriptionRequired:       getEnv("SUBSCRIPTION_REQUIRED", "true") == "true",
 			FreeTrialDays:              parseInt(getEnv("FREE_TRIAL_DAYS", "5")),
-			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "5-day free trial, then 10 USDT/month via Binance. Open the Mini App to subscribe."),
+			SubscriptionContactMessage: getEnv("SUBSCRIPTION_CONTACT", "Pay in USDT via Binance only (no cards). Pro or team plans? Contact us on Telegram."),
+			ValueProposition: getEnv("VALUE_PROPOSITION", "Automate with discipline: built-in risk limits, qualified signals, and execution on the MT broker you already use."),
+			ContactUsURL:     getEnv("CONTACT_US_URL", ""),
+			ContactUsLabel:   getEnv("CONTACT_US_LABEL", "Contact us"),
 			WebSessionSecret:           getEnv("WEB_SESSION_SECRET", ""),
 			WebSessionTTLDays:          parseInt(getEnv("WEB_SESSION_TTL_DAYS", "365")),
 			PublicSiteURL:              strings.TrimRight(getEnv("PUBLIC_SITE_URL", "https://marketmamba.kkooapp.co.tz"), "/"),
@@ -157,6 +163,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if cfg.Payments.MiniAppURL == "" {
 		cfg.Payments.MiniAppURL = cfg.App.PublicSiteURL
+	}
+	if cfg.App.ContactUsURL == "" && cfg.Telegram.BotUsername != "" {
+		cfg.App.ContactUsURL = "https://t.me/" + cfg.Telegram.BotUsername
 	}
 	cfg.App.SignalSymbols = ParseSignalSymbols(
 		getEnv("SIGNAL_BROADCAST_SYMBOLS", "EURUSD,BTCUSD"),

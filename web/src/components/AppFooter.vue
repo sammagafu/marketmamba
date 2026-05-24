@@ -1,12 +1,14 @@
 <script setup>
 import { computed } from 'vue'
 import BrandLogo from './BrandLogo.vue'
-import { TAGLINE, SLOGAN_SHORT } from '../brand'
+import { TAGLINE, SLOGAN_SHORT, PAYMENT_NOTE } from '../brand'
 import { RISK_DISCLAIMER } from '../howItWorks'
 
 const props = defineProps({
   landing: { type: Boolean, default: false },
   botUsername: { type: String, default: 'market_mamba_bot' },
+  contactUrl: { type: String, default: '' },
+  contactLabel: { type: String, default: 'Contact us' },
 })
 
 const year = computed(() => new Date().getFullYear())
@@ -26,18 +28,22 @@ const telegramUrl = computed(() => `https://t.me/${props.botUsername}`)
       </div>
 
       <nav class="footer-nav" aria-label="Footer">
-        <p class="footer-nav-label">Explore</p>
+        <p class="footer-nav-label">Resources</p>
         <ul class="footer-links">
           <li v-if="landing">
-            <a href="#how-we-trade">How we trade</a>
+            <a href="#how-we-trade">How it works</a>
           </li>
           <li v-if="landing">
-            <a href="#login-portal">Get started</a>
+            <a href="#login-portal">Sign in</a>
           </li>
           <li>
             <a :href="telegramUrl" target="_blank" rel="noopener">Telegram @{{ botUsername }}</a>
           </li>
+          <li v-if="contactUrl">
+            <a :href="contactUrl" target="_blank" rel="noopener">{{ contactLabel }}</a>
+          </li>
         </ul>
+        <p class="footer-pay muted">{{ PAYMENT_NOTE }}</p>
       </nav>
 
       <div class="footer-meta">
@@ -139,6 +145,12 @@ const telegramUrl = computed(() => `https://t.me/${props.botUsername}`)
 
 .footer-links a:hover {
   color: var(--win-bright);
+}
+
+.footer-pay {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 .footer-meta {

@@ -7,13 +7,26 @@ import logoIcon from './assets/images/favcon.svg'
 /** Primary slogan (hero, marketing). */
 export const SLOGAN = 'When the market moves, the mamba strikes'
 
-/** Short tag for header / mobile (same idea, tighter). */
+/** Short tag for header / mobile. */
 export const SLOGAN_SHORT = 'Market moves. Mamba strikes.'
 
-/** Supporting line under the name. */
-export const TAGLINE = 'Forex automation on Telegram'
+/** One-line descriptor under the logo. */
+export const TAGLINE = 'Controlled automation on your broker'
 
-/** Brand SVGs (Vite resolves URLs; favicon copied to public on build). */
+/** Core product promise. */
+export const VALUE_PROPOSITION =
+  'Automate with discipline: built-in risk limits, qualified signals, and execution on the MT broker you already use.'
+
+/** Billing — no card processors. */
+export const PAYMENT_NOTE = 'USDT via Binance only. No cards or Stripe.'
+
+/** Hero rotating emphasis words (lowercase in UI). */
+export const HERO_FOCUS_WORDS = ['discipline', 'risk limits', 'automation', 'control']
+
+/** Login portal */
+export const PORTAL_TITLE = 'Client sign-in'
+export const PORTAL_SUB = 'Telegram login · USDT billing in the bot'
+
 export const ASSETS = {
   logoPortrait,
   logoLandscape,

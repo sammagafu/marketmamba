@@ -107,6 +107,40 @@ video {
 h1, h2, h3 {
   font-family: var(--font-sans);
   color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+/* Shared section typography — landing, dashboard, wizards */
+.section-eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-title {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.125rem, 3.5vw, 1.375rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.section-lead {
+  margin: 0 0 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 40rem;
+}
+
+.copy-block {
+  margin-bottom: 1.75rem;
+}
+
+.copy-block:last-child {
+  margin-bottom: 0;
 }
 
 input, select, button {
@@ -169,12 +203,12 @@ button {
 
 .grid {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
   grid-template-columns: 1fr;
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 1rem var(--page-pad-right) 2rem var(--page-pad);
+  padding: 1.25rem var(--page-pad-right) 2.5rem var(--page-pad);
 }
 
 @media (min-width: 640px) {

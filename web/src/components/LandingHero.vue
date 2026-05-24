@@ -1,6 +1,15 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
-import { SLOGAN, SLOGAN_SHORT, TAGLINE } from '../brand'
+import {
+  SLOGAN,
+  SLOGAN_SHORT,
+  TAGLINE,
+  VALUE_PROPOSITION,
+  PAYMENT_NOTE,
+  HERO_FOCUS_WORDS,
+  PORTAL_TITLE,
+  PORTAL_SUB,
+} from '../brand'
 import BrandLogo from './BrandLogo.vue'
 import HowWeTrade from './HowWeTrade.vue'
 
@@ -16,7 +25,7 @@ defineEmits(['error'])
 const tickers = ['BTCUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'AUDUSD']
 const featuredPair = 'BTCUSD'
 const headlineWord = ref(0)
-const words = ['precision', 'signals', 'automation', 'discipline']
+const words = HERO_FOCUS_WORDS
 const displayTrades = ref(0)
 const displayUsers = ref(0)
 
@@ -73,7 +82,7 @@ onUnmounted(() => {
             class="marquee-item bull"
           >{{ pair }}</span>
           <span class="marquee-dot">◆</span>
-          <span class="marquee-item live bull">SIGNALS LIVE</span>
+          <span class="marquee-item live bull">RISK-LIMITED AUTOMATION</span>
           <span class="marquee-dot">◆</span>
         </span>
       </div>
@@ -92,52 +101,68 @@ onUnmounted(() => {
         <p class="hero-slogan">{{ SLOGAN }}</p>
 
         <h1 class="mega-title">
-          <span class="line-muted">Hunt the market with</span>
+          <span class="line-muted">Forex automation with</span>
           <span class="line-flip" :key="words[headlineWord]">{{ words[headlineWord] }}</span>
         </h1>
 
-        <p class="hero-lede">
-          {{ SLOGAN_SHORT }} Qualified signals, rule-based sizing, and a full trade log —
-          <a class="hero-link" href="#how-we-trade">see how we trade</a>.
+        <p class="hero-lede hero-lede-primary">
+          {{ config?.value_proposition || VALUE_PROPOSITION }}
+        </p>
+        <p class="hero-lede hero-lede-secondary">
+          <span class="hero-slogan-inline">{{ SLOGAN }}</span>
+        </p>
+        <p class="hero-meta">
+          {{ PAYMENT_NOTE }}
+          <span class="hero-meta-sep">·</span>
+          <a class="hero-link" href="#how-we-trade">How we trade</a>
+          <template v-if="config?.contact_us_url">
+            <span class="hero-meta-sep">·</span>
+            <a
+              class="hero-link"
+              :href="config.contact_us_url"
+              target="_blank"
+              rel="noopener"
+            >{{ config.contact_us_label || 'Contact us' }}</a>
+          </template>
         </p>
 
         <div class="pair-hero">
-          <span class="pair-label">Watching</span>
+          <span class="pair-label">Example pair</span>
           <span class="pair-big">{{ featuredPair }}</span>
           <span class="pair-meta">
-            <span class="pair-buy">BUY</span> · <span class="pair-sell">SELL</span> · TP · SL
+            Qualified setups · SL &amp; TP required
           </span>
         </div>
 
         <div class="stat-row">
           <div class="stat-card stat-bull">
             <span class="stat-num">{{ displayTrades }}</span>
-            <span class="stat-cap">Trades logged</span>
+            <span class="stat-cap">Trades on record</span>
           </div>
           <div class="stat-card stat-bull stat-alt">
             <span class="stat-num">{{ displayUsers }}</span>
-            <span class="stat-cap">Active traders</span>
+            <span class="stat-cap">Registered clients</span>
           </div>
           <div class="stat-card stat-glow">
-            <span class="stat-num">∞</span>
-            <span class="stat-cap">Ambition</span>
+            <span class="stat-num">2%</span>
+            <span class="stat-cap">Default daily loss cap</span>
           </div>
         </div>
 
         <div class="steps">
           <div class="step">
             <span class="step-n">01</span>
-            <span>Login with Telegram</span>
+            <span>Sign in with Telegram</span>
           </div>
           <div class="step-line" />
           <div class="step">
             <span class="step-n">02</span>
-            <span>Connect broker</span>
+            <span>Link your MT broker</span>
           </div>
           <div class="step-line" />
           <div class="step">
             <span class="step-n">03</span>
-            <span>Auto-trade with risk limits</span>
+            <span>Run automation within limits</span>
           </div>
         </div>
       </section>
@@ -146,8 +171,10 @@ onUnmounted(() => {
         <div class="portal">
           <div class="portal-glow" aria-hidden="true" />
           <div class="portal-inner">
-            <h2 class="portal-title">Enter the pit</h2>
-            <p class="portal-sub">Sign in with Telegram · sessions last ~1 year</p>
+            <h2 class="portal-title">{{ PORTAL_TITLE }}</h2>
+            <p class="portal-sub">
+              {{ PORTAL_SUB }} · {{ config?.free_trial_days ?? 5 }}-day evaluation
+            </p>
 
             <p v-if="apiOffline" class="api-offline">
               Offline — <strong>{{ apiTarget }}</strong>
@@ -163,14 +190,14 @@ onUnmounted(() => {
               target="_blank"
               rel="noopener"
             >
-              Continue in Telegram → @{{ botUsername }}
+              Open Telegram bot → @{{ botUsername }}
             </a>
           </div>
         </div>
 
         <p class="scroll-hint">
           <span class="scroll-line" aria-hidden="true" />
-          <a href="#how-we-trade">How we trade</a>
+          <a href="#how-we-trade">Our process</a>
         </p>
       </aside>
     </div>
@@ -189,7 +216,7 @@ onUnmounted(() => {
   overflow-x: hidden;
   overflow-y: visible;
   margin: 0;
-  padding: 0 var(--page-pad-right) 2rem var(--page-pad);
+  padding: 0 var(--page-pad-right) 3rem var(--page-pad);
   padding-bottom: max(2rem, env(safe-area-inset-bottom));
 }
 
@@ -214,7 +241,7 @@ onUnmounted(() => {
   background: var(--header-bg);
   backdrop-filter: blur(8px);
   padding: 0.5rem 0;
-  margin: 0 0 1.5rem;
+  margin: 0 0 1.75rem;
 }
 
 .marquee-track {
@@ -266,7 +293,7 @@ onUnmounted(() => {
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1.5rem;
+  gap: 2rem;
   align-items: start;
 }
 
@@ -339,19 +366,23 @@ onUnmounted(() => {
 }
 
 .hero-slogan {
-  margin: 0 0 0.75rem;
-  font-size: clamp(1rem, 2.8vw, 1.35rem);
-  font-weight: 600;
-  line-height: 1.35;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  text-shadow: 0 0 36px var(--win-glow);
+  margin: 0 0 1rem;
+  font-size: clamp(0.95rem, 2.5vw, 1.15rem);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--text-soft);
   max-width: 100%;
   overflow-wrap: anywhere;
 }
 
+.hero-slogan-inline {
+  font-style: italic;
+  color: var(--text-soft);
+}
+
 .mega-title {
-  margin: 0 0 1.25rem;
+  margin: 0 0 1rem;
   font-size: clamp(1.75rem, 8vw, 3.75rem);
   font-weight: 800;
   line-height: 1.05;
@@ -369,6 +400,7 @@ onUnmounted(() => {
 
 .line-flip {
   display: block;
+  font-size: clamp(1.35rem, 6vw, 3.2rem);
   background: linear-gradient(90deg, var(--win-bright) 0%, var(--win) 55%, var(--win-deep) 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -389,12 +421,30 @@ onUnmounted(() => {
   }
 }
 
-.hero-lede {
+.hero-lede-primary {
+  margin: 0 0 0.85rem;
+  max-width: 38rem;
+  font-size: clamp(1rem, 2.6vw, 1.125rem);
+  line-height: 1.6;
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.hero-lede-secondary {
+  margin: 0 0 1rem;
+}
+
+.hero-meta {
   margin: 0 0 1.75rem;
-  max-width: 32rem;
-  font-size: clamp(0.95rem, 2.5vw, 1.1rem);
-  line-height: 1.65;
+  max-width: 38rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
   color: var(--muted);
+}
+
+.hero-meta-sep {
+  margin: 0 0.35rem;
+  opacity: 0.5;
 }
 
 .hero-link {

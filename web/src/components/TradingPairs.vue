@@ -67,12 +67,15 @@ onMounted(load)
 <template>
   <section class="card card-bull wide pairs-card">
     <div class="pairs-head">
-      <h2>Trading pairs</h2>
+      <div>
+        <p class="section-eyebrow">Automation scope</p>
+        <h2 class="section-title section-title-sm">Trading pairs</h2>
+      </div>
       <button type="button" class="btn-secondary" :disabled="loading" @click="load">Refresh</button>
     </div>
     <p class="muted pairs-lede">
-      Choose which pairs you receive signals for and which auto-trade when
-      <code>/autostart</code> is on.
+      Select symbols for signal delivery and auto-execution when automation is enabled
+      (<code>/autostart</code>).
     </p>
     <p v-if="loading" class="muted">Loading…</p>
     <template v-else>

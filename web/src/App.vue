@@ -256,11 +256,11 @@ onMounted(async () => {
       <span v-else class="user-badge">Trader</span>
       <button type="button" class="btn-secondary" @click="logout">Log out</button>
     </div>
-    <a v-else class="header-cta" href="#login-portal">Get started</a>
+    <a v-else class="header-cta" href="#login-portal">Sign in</a>
   </header>
 
   <p v-if="loggedIn && isBlocked" class="err banner-msg blocked-banner">
-    Account blocked — you cannot use trading features. Contact support.
+    Your account is restricted. Contact us for assistance.
   </p>
   <p v-else-if="loggedIn && !canTrade && tradeMessage" class="err banner-msg blocked-banner">
     {{ tradeMessage }}
@@ -346,7 +346,12 @@ onMounted(async () => {
   </div>
   </main>
 
-  <AppFooter :landing="!loggedIn" :bot-username="botUsername" />
+  <AppFooter
+    :landing="!loggedIn"
+    :bot-username="botUsername"
+    :contact-url="config?.contact_us_url || ''"
+    :contact-label="config?.contact_us_label || 'Contact us'"
+  />
   </div>
 </template>
 

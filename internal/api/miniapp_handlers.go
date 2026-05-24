@@ -78,6 +78,10 @@ func (s *Server) handleMiniAppDashboard(w http.ResponseWriter, r *http.Request) 
 		"subscription": subStatus,
 		"pricing":      s.payments.Pricing(),
 		"public_site_url": s.cfg.App.PublicSiteURL,
-		"connect_url":     strings.TrimRight(s.cfg.App.PublicSiteURL, "/") + "/#/connect",
+		"connect_url":        strings.TrimRight(s.cfg.App.PublicSiteURL, "/") + "/#/connect",
+		"value_proposition":  s.cfg.App.ValueProposition,
+		"contact_us_url":     s.cfg.App.ContactUsURL,
+		"contact_us_label":   s.cfg.App.ContactUsLabel,
+		"payment_note":       "USDT via Binance only — no cards.",
 	})
 }

@@ -210,7 +210,12 @@ func (tb *TelegramBot) brokerFor(userID int64) (broker.Broker, error) {
 
 func (tb *TelegramBot) handleStart(chatID, userID int64) {
 	sub, _ := tb.subs.GetForUser(userID)
-	planLine := fmt.Sprintf("*%d-day free trial* — then *%.0f USDT/month* via Binance.", tb.cfg.App.FreeTrialDays, tb.cfg.Payments.SubscriptionPriceUSDT)
+	planLine := fmt.Sprintf(
+		"*%d-day free trial* — then *%.0f USDT/month* (Binance USDT only, no cards).\n%s",
+		tb.cfg.App.FreeTrialDays,
+		tb.cfg.Payments.SubscriptionPriceUSDT,
+		tb.cfg.App.ValueProposition,
+	)
 	if sub != nil && sub.ExpiresAt != nil {
 		planLine = fmt.Sprintf("Plan: *%s* until %s", sub.Plan, sub.ExpiresAt.Format("2006-01-02 15:04"))
 	}
@@ -256,19 +261,34 @@ func (tb *TelegramBot) handleSubscribe(chatID, userID int64) {
 	if price <= 0 {
 		price = 10
 	}
-	msg := fmt.Sprintf(`*Market Mamba subscription*
+	contact := tb.cfg.App.ContactUsURL
+	if contact == "" && tb.api.Self.UserName != "" {
+		contact = "https://t.me/" + tb.api.Self.UserName
+	}
+	contactLine := ""
+	if contact != "" {
+		contactLine = fmt.Sprintf("\n❓ Pro / teams: [%s](%s)", tb.cfg.App.ContactUsLabel, contact)
+	}
+	msg := fmt.Sprintf(`*Market Mamba*
+
+%s
 
 🎁 *%d-day free trial* (automatic on /start)
-💳 Then *%.0f USDT / month* via *Binance* (USDT)
+💳 *%.0f USDT / month* — Binance USDT only (no Stripe)
 
-Tap *📊 Dashboard* in the bot menu to:
-• View all trades & positions
-• Pay with Binance Pay or USDT transfer
+📊 *Dashboard* menu → trades, subscribe, connect broker
 
 Current access until: %s
 Your Telegram ID: `+"`%d`"+`
-
-%s`, tb.cfg.App.FreeTrialDays, price, exp, userID, tb.cfg.App.SubscriptionContactMessage)
+%s%s`,
+		tb.cfg.App.ValueProposition,
+		tb.cfg.App.FreeTrialDays,
+		price,
+		exp,
+		userID,
+		tb.cfg.App.SubscriptionContactMessage,
+		contactLine,
+	)
 	tb.sendMessage(chatID, msg)
 }
 

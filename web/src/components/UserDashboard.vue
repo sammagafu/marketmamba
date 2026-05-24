@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { VALUE_PROPOSITION, PAYMENT_NOTE } from '../brand'
 
 const props = defineProps({
   status: { type: Object, default: null },
@@ -52,6 +53,16 @@ function usagePct(used, max) {
 
 const miniAppUrl = computed(() => props.config?.mini_app_url || props.config?.public_site_url || '')
 
+const valueProp = computed(
+  () => props.config?.value_proposition || VALUE_PROPOSITION,
+)
+const contactUrl = computed(() => props.config?.contact_us_url || '')
+const contactLabel = computed(() => props.config?.contact_us_label || 'Contact us')
+const priceUsdt = computed(() => props.config?.subscription_price_usdt ?? 10)
+const trialDays = computed(
+  () => props.config?.free_trial_days ?? props.config?.trial_days ?? 5,
+)
+
 function fmtProfit(t) {
   if (t.profit == null) return '—'
   const n = Number(t.profit)
@@ -66,14 +77,19 @@ function fmtTime(iso) {
 
 <template>
   <section class="user-dashboard wide">
-    <p class="warn isolation-hint">
-      Auto-trade uses your connected broker only. Avoid manual trades on the same account while automation is on.
+    <header class="dash-intro copy-block">
+      <p class="section-eyebrow">Client dashboard</p>
+      <h2 class="section-title">Account overview</h2>
+      <p class="section-lead dash-lead">{{ valueProp }}</p>
+    </header>
+
+    <p class="isolation-hint">
+      Automation runs on your linked broker only. Pause auto-trading before placing manual trades on the same account.
     </p>
 
     <div class="dash-head">
       <div class="dash-title">
-        <h2>Your dashboard</h2>
-        <p class="muted">Only your trades and positions — not shared with other clients</p>
+        <p class="section-eyebrow">At a glance</p>
       </div>
       <div class="dash-head-actions">
         <span v-if="telegramId" class="id-pill">ID <code>{{ telegramId }}</code></span>
@@ -105,8 +121,9 @@ function fmtTime(iso) {
     </div>
 
     <div v-if="tierInfo" class="card card-bull tier-usage">
-      <h3>Plan usage ({{ tierInfo.limits?.plan || 'trial' }})</h3>
-      <p class="muted small">Resets monthly (UTC). Period: {{ tierInfo.usage?.period_start || '—' }}</p>
+      <p class="section-eyebrow">Membership</p>
+      <h3 class="section-title tier-title">Plan usage · {{ tierInfo.limits?.plan || 'trial' }}</h3>
+      <p class="muted small tier-sub">Monthly allowance (UTC). Period starts {{ tierInfo.usage?.period_start || '—' }}</p>
       <ul class="usage-list">
         <li>
           <span>Broker accounts</span>
@@ -143,11 +160,15 @@ function fmtTime(iso) {
 
     <div v-if="miniAppUrl" class="mini-cta card-inline">
       <div>
-        <strong>📱 Telegram Mini App</strong>
-        <p class="muted">
-          {{ config?.subscription_price_usdt ?? 10 }} USDT/month after
-          {{ config?.free_trial_days ?? config?.trial_days ?? 5 }}-day trial — pay via Binance in bot menu
-          <strong>📊 Dashboard</strong>
+        <p class="section-eyebrow">Billing</p>
+        <strong class="cta-title">Manage subscription in Telegram</strong>
+        <p class="muted cta-body">
+          {{ trialDays }}-day evaluation, then <strong>{{ priceUsdt }} USDT</strong> per month via Binance.
+          {{ PAYMENT_NOTE }}
+        </p>
+        <p v-if="contactUrl" class="muted contact-line">
+          <a :href="contactUrl" target="_blank" rel="noopener">{{ contactLabel }}</a>
+          for Pro, enterprise, or billing support.
         </p>
       </div>
       <a
@@ -159,7 +180,8 @@ function fmtTime(iso) {
     </div>
 
     <section class="card card-bull dash-section">
-      <h3>Your open positions</h3>
+      <p class="section-eyebrow">Live book</p>
+      <h3 class="section-title section-title-sm">Open positions</h3>
       <div class="table-wrap">
         <table v-if="positions.length">
           <thead>
@@ -183,7 +205,10 @@ function fmtTime(iso) {
 
     <section class="card trade-log-card dash-section">
       <div class="trade-log-head">
-        <h3>Your trade log</h3>
+        <div>
+          <p class="section-eyebrow">History</p>
+          <h3 class="section-title section-title-sm">Trade log</h3>
+        </div>
         <div class="filter-tabs">
           <button type="button" :class="{ active: tradeFilter === 'all' }" @click="tradeFilter = 'all'">
             All ({{ trades.length }})
@@ -220,7 +245,7 @@ function fmtTime(iso) {
         </table>
         <p v-else class="muted empty-hint">
           No trades in this view yet.<br />
-          Telegram: connect broker → <code>/open</code> or <code>/autostart</code>
+          Link your broker, then use <code>/open</code> or <code>/autostart</code> in Telegram.
         </p>
       </div>
     </section>
@@ -231,9 +256,52 @@ function fmtTime(iso) {
 .user-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   width: 100%;
   grid-column: 1 / -1;
+}
+
+.dash-intro {
+  margin-bottom: 0.25rem;
+}
+
+.dash-lead {
+  margin-bottom: 0;
+}
+
+.isolation-hint {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 10px;
+}
+
+.section-title-sm {
+  font-size: 1.0625rem;
+  margin-bottom: 0.75rem;
+}
+
+.tier-title {
+  margin-bottom: 0.35rem;
+}
+
+.tier-sub {
+  margin: 0 0 0.75rem;
+}
+
+.cta-title {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.cta-body {
+  margin: 0;
+  line-height: 1.55;
 }
 
 .dash-head {
@@ -247,6 +315,16 @@ function fmtTime(iso) {
 .dash-title h2 {
   margin: 0 0 0.25rem;
   font-size: clamp(1.1rem, 4vw, 1.35rem);
+}
+
+.contact-line {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+}
+
+.contact-line a {
+  color: var(--brand);
+  font-weight: 600;
 }
 
 .dash-title p {

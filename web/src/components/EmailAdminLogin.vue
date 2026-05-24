@@ -23,7 +23,8 @@ async function submit() {
 
 <template>
   <div class="email-login">
-    <p class="login-title">Admin login (email)</p>
+    <p class="section-eyebrow login-eyebrow">Operations</p>
+    <p class="login-title">Administrator sign-in</p>
     <div class="field">
       <label>Email</label>
       <input v-model="email" type="email" autocomplete="username" placeholder="magafu317@gmail.com" />
@@ -46,7 +47,8 @@ async function submit() {
   max-width: 100%;
   min-width: 0;
 }
-.login-title { font-weight: 600; margin-bottom: 0.75rem; text-align: center; }
+.login-eyebrow { text-align: center; margin-bottom: 0.35rem; }
+.login-title { font-weight: 700; margin: 0 0 1rem; text-align: center; font-size: 1.05rem; }
 .field { margin-bottom: 0.75rem; }
 button { width: 100%; margin-top: 0.25rem; }
 </style>

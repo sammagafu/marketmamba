@@ -10,15 +10,16 @@ import {
 
 <template>
   <section id="how-we-trade" class="how-trade" aria-labelledby="how-trade-title">
-    <header class="how-head">
-      <p class="how-eyebrow">Transparency</p>
-      <h2 id="how-trade-title" class="how-title">How we take trades</h2>
-      <p class="how-lead">
-        Market Mamba is built around qualified signals, technical filters, and hard risk limits —
-        not gut feel. Here is what happens from scan to close.
+    <header class="how-head copy-block">
+      <p class="section-eyebrow">How it works</p>
+      <h2 id="how-trade-title" class="section-title how-title">Controlled execution, end to end</h2>
+      <p class="section-lead how-lead">
+        Qualified signals, technical filters, and firm risk limits on the broker you already use.
+        We do not copy third-party Telegram channels.
       </p>
     </header>
 
+    <p class="section-eyebrow pipeline-label">The pipeline</p>
     <ol class="how-pipeline">
       <li v-for="item in TRADE_PIPELINE" :key="item.step" class="how-pipe-card">
         <span class="how-pipe-n">{{ item.step }}</span>
@@ -31,7 +32,8 @@ import {
 
     <div class="how-columns">
       <div class="how-block">
-        <h3 class="how-block-title">Indicators &amp; filters</h3>
+        <p class="section-eyebrow">Technical filters</p>
+        <h3 class="how-block-title">What we measure</h3>
         <ul class="how-card-list">
           <li v-for="ind in INDICATORS" :key="ind.name" class="how-card">
             <span class="how-tag">{{ ind.tag }}</span>
@@ -42,7 +44,8 @@ import {
       </div>
 
       <div class="how-block">
-        <h3 class="how-block-title">Risk &amp; limits</h3>
+        <p class="section-eyebrow">Risk framework</p>
+        <h3 class="how-block-title">What we enforce</h3>
         <ul class="how-card-list">
           <li v-for="rule in RISK_CONTROLS" :key="rule.name" class="how-card how-card-risk">
             <div class="how-risk-top">
@@ -55,6 +58,7 @@ import {
       </div>
     </div>
 
+    <p class="section-eyebrow sources-label">Platform</p>
     <div class="how-sources">
       <article v-for="src in SIGNAL_SOURCES" :key="src.title" class="how-source">
         <h3 class="how-source-title">{{ src.title }}</h3>
@@ -72,45 +76,35 @@ import {
   z-index: 2;
   width: 100%;
   max-width: 1100px;
-  margin: 2rem auto 0;
-  padding-top: 2rem;
+  margin: 3rem auto 0;
+  padding-top: 2.5rem;
   border-top: 1px solid var(--border);
 }
 
 .how-head {
-  margin-bottom: 2rem;
-  max-width: 42rem;
-}
-
-.how-eyebrow {
-  margin: 0 0 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--win-bright);
+  margin-bottom: 2.5rem;
 }
 
 .how-title {
-  margin: 0 0 0.75rem;
-  font-size: clamp(1.5rem, 5vw, 2rem);
+  font-size: clamp(1.5rem, 5vw, 2.125rem);
   font-weight: 800;
-  line-height: 1.15;
 }
 
 .how-lead {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.pipeline-label,
+.sources-label {
+  margin-bottom: 1rem;
 }
 
 .how-pipeline {
   list-style: none;
-  margin: 0 0 2.5rem;
+  margin: 0 0 3rem;
   padding: 0;
   display: grid;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 @media (min-width: 640px) {
@@ -127,9 +121,9 @@ import {
 
 .how-pipe-card {
   display: flex;
-  gap: 0.75rem;
-  padding: 1rem;
-  border-radius: 14px;
+  gap: 0.85rem;
+  padding: 1.15rem 1.2rem;
+  border-radius: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   min-width: 0;
@@ -137,41 +131,41 @@ import {
 
 .how-pipe-n {
   flex-shrink: 0;
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
   font-weight: 800;
   color: var(--win);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
 }
 
 .how-pipe-title {
-  margin: 0 0 0.35rem;
-  font-size: 0.95rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.9375rem;
   font-weight: 700;
 }
 
 .how-pipe-body {
   margin: 0;
-  font-size: 0.8rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  line-height: 1.55;
   color: var(--muted);
 }
 
 .how-columns {
   display: grid;
-  gap: 2rem;
-  margin-bottom: 2rem;
+  gap: 2.5rem;
+  margin-bottom: 2.5rem;
 }
 
 @media (min-width: 900px) {
   .how-columns {
     grid-template-columns: 1fr 1fr;
-    gap: 2.5rem;
+    gap: 3rem;
   }
 }
 
 .how-block-title {
-  margin: 0 0 1rem;
-  font-size: 1.1rem;
+  margin: 0 0 1.15rem;
+  font-size: 1.0625rem;
   font-weight: 700;
 }
 
@@ -180,11 +174,11 @@ import {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.65rem;
+  gap: 0.75rem;
 }
 
 .how-card {
-  padding: 0.85rem 1rem;
+  padding: 1rem 1.1rem;
   border-radius: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -192,10 +186,10 @@ import {
 
 .how-tag {
   display: inline-block;
-  margin-bottom: 0.35rem;
-  font-size: 0.65rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.625rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--win-bright);
 }
@@ -203,13 +197,13 @@ import {
 .how-card-name {
   display: block;
   font-size: 0.9rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
 }
 
 .how-card-detail {
   margin: 0;
-  font-size: 0.8rem;
-  line-height: 1.45;
+  font-size: 0.8125rem;
+  line-height: 1.5;
   color: var(--muted);
 }
 
@@ -219,11 +213,11 @@ import {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.35rem 0.75rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
 }
 
 .how-risk-value {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-weight: 800;
   color: var(--brand);
   font-variant-numeric: tabular-nums;
@@ -232,41 +226,42 @@ import {
 .how-sources {
   display: grid;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 
-@media (min-width: 720px) {
+@media (min-width: 640px) {
   .how-sources {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 .how-source {
-  padding: 1rem 1.1rem;
-  border-radius: 14px;
+  padding: 1.15rem 1.2rem;
+  border-radius: 12px;
   border: 1px solid var(--border);
-  background: linear-gradient(160deg, var(--surface), var(--surface-raised));
+  background: var(--surface);
 }
 
 .how-source-title {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
+  margin: 0 0 0.55rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--text);
+  line-height: 1.35;
 }
 
 .how-source-body {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  line-height: 1.55;
   color: var(--muted);
 }
 
 .how-disclaimer {
   margin: 0;
-  padding: 1rem 1.1rem;
-  font-size: 0.78rem;
-  line-height: 1.5;
+  padding: 1.15rem 1.2rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
   color: var(--muted);
   border-radius: 10px;
   background: var(--warn-bg);
