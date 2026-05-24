@@ -16,6 +16,7 @@ const pendingOrder = ref(null)
 const txRef = ref('')
 const paying = ref(false)
 const dailyStats = ref(null)
+const connectUrl = ref('')
 
 const canTrade = computed(() => subscription.value?.can_trade === true)
 const planLabel = computed(() => {
@@ -50,6 +51,7 @@ async function loadDashboard() {
   subscription.value = data.subscription || {}
   pricing.value = data.pricing || {}
   dailyStats.value = data.daily_stats || null
+  connectUrl.value = data.connect_url || ''
 }
 
 async function startPayment() {
@@ -147,6 +149,13 @@ onMounted(async () => {
         <button type="button" class="btn-primary" :disabled="paying" @click="startPayment">
           {{ paying ? 'Please wait…' : 'Subscribe — 10 USDT / month' }}
         </button>
+        <a
+          v-if="connectUrl"
+          class="link-btn broker-link"
+          :href="connectUrl"
+          target="_blank"
+          rel="noopener"
+        >Connect broker (Deriv, Exness, Tickmill…)</a>
       </section>
 
       <section v-if="pendingOrder" class="card pay-card">

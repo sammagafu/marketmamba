@@ -7,6 +7,8 @@ const props = defineProps({
   trades: { type: Array, default: () => [] },
   activateTarget: { type: String, default: '' },
   activateDays: { type: Number, default: 30 },
+  brokerConnections: { type: Object, default: () => ({}) },
+  enabledBrokerBrands: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits([
@@ -131,6 +133,19 @@ function fmtTime(iso) {
           <strong>${{ Number(stats.net_profit_closed ?? 0).toFixed(2) }}</strong>
           <span>Net P/L (closed)</span>
         </div>
+      </div>
+
+      <div v-if="enabledBrokerBrands.length" class="admin-block broker-admin">
+        <h3>Enabled brokers</h3>
+        <ul class="brand-list">
+          <li v-for="b in enabledBrokerBrands" :key="b.id">
+            {{ b.name }} <span class="muted">({{ b.adapter }})</span>
+          </li>
+        </ul>
+        <p v-if="Object.keys(brokerConnections).length" class="muted small">
+          Active connections:
+          <span v-for="(n, p) in brokerConnections" :key="p">{{ p }}: {{ n }} </span>
+        </p>
       </div>
 
       <div class="admin-toolbar">

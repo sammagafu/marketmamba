@@ -10,6 +10,7 @@ import AdminPanel from './components/AdminPanel.vue'
 import UserDashboard from './components/UserDashboard.vue'
 import BrandLogo from './components/BrandLogo.vue'
 import TradingPairs from './components/TradingPairs.vue'
+import BrokerConnectWizard from './components/BrokerConnectWizard.vue'
 import AppFooter from './components/AppFooter.vue'
 
 const loggedIn = ref(false)
@@ -23,11 +24,11 @@ const positions = ref([])
 const trades = ref([])
 const adminTrades = ref([])
 const brokers = ref([])
-const provider = ref('mock')
-const dynamicFields = ref([])
-const brokerLabel = ref('')
+const brands = ref([])
+const metaapiSharedToken = ref(false)
 const brokerConnection = ref(null)
-const credentials = ref({})
+const adminBrokerConnections = ref({})
+const adminEnabledBrands = ref([])
 const message = ref('')
 const messageOk = ref(true)
 const adminStats = ref(null)
@@ -42,9 +43,8 @@ const canTrade = ref(true)
 const tradeMessage = ref('')
 const telegramId = ref('')
 
-const selectedBroker = computed(() => brokers.value.find((b) => b.id === provider.value))
-const brokerIsLive = computed(() => selectedBroker.value?.status === 'live')
 const botUsername = computed(() => config.value?.telegram_bot_username || 'market_mamba_bot')
+const publicSiteUrl = computed(() => config.value?.public_site_url || '')
 
 function onLoggedIn(data) {
   loggedIn.value = true
@@ -81,17 +81,9 @@ function logout() {
   messageOk.value = true
 }
 
-function onProviderChange() {
-  dynamicFields.value = selectedBroker.value?.fields || []
-  const next = {}
-  for (const f of dynamicFields.value) {
-    if (f.type === 'boolean') {
-      next[f.key] = credentials.value[f.key] === 'true' ? 'true' : 'false'
-    } else {
-      next[f.key] = credentials.value[f.key] ?? ''
-    }
-  }
-  credentials.value = next
+function onBrokerWizardMessage(m) {
+  message.value = m.text
+  messageOk.value = m.ok
 }
 
 async function refresh() {
@@ -130,16 +122,15 @@ async function refresh() {
     }
     const bt = await api('/brokers/types')
     brokers.value = bt.brokers || []
-    onProviderChange()
+    brands.value = bt.brands || []
+    metaapiSharedToken.value = bt.metaapi_shared_token === true
     const conn = await api('/brokers/connection')
     brokerConnection.value = conn.connection
-    if (conn.connection) {
-      provider.value = conn.connection.provider
-      brokerLabel.value = conn.connection.label || ''
-      onProviderChange()
-    }
     if (can(permissions.value, Perm.adminStats)) {
-      adminStats.value = await api('/admin/stats')
+      const adminRes = await api('/admin/stats')
+      adminStats.value = adminRes.stats || adminRes
+      adminBrokerConnections.value = adminRes.broker_connections || {}
+      adminEnabledBrands.value = adminRes.enabled_broker_brands || []
       const u = await api('/admin/users')
       recentUsers.value = u.users || []
       try {
@@ -153,50 +144,6 @@ async function refresh() {
     if (e.message.includes('session') || e.message.includes('log in')) {
       logout()
     }
-    message.value = e.message
-    messageOk.value = false
-  }
-}
-
-async function connectMockDemo() {
-  provider.value = 'mock'
-  brokerLabel.value = 'Demo account'
-  credentials.value = { initial_balance: '10000' }
-  onProviderChange()
-  await saveBroker()
-}
-
-async function testBroker() {
-  try {
-    const creds = { ...credentials.value }
-    const r = await api('/brokers/test', {
-      method: 'POST',
-      body: { provider: provider.value, label: brokerLabel.value, credentials: creds },
-    })
-    message.value = `Connection OK — balance $${r.balance}`
-    messageOk.value = true
-  } catch (e) {
-    message.value = e.message
-    messageOk.value = false
-  }
-}
-
-async function saveBroker() {
-  if (!brokerIsLive.value) {
-    message.value = 'This broker is not available yet — use Mock (Demo)'
-    messageOk.value = false
-    return
-  }
-  try {
-    const creds = { ...credentials.value }
-    await api('/brokers/connection', {
-      method: 'POST',
-      body: { provider: provider.value, label: brokerLabel.value, credentials: creds },
-    })
-    message.value = 'Broker saved'
-    messageOk.value = true
-    refresh()
-  } catch (e) {
     message.value = e.message
     messageOk.value = false
   }
@@ -353,6 +300,8 @@ onMounted(async () => {
     <AdminPanel
       v-if="can(permissions, Perm.adminStats) && adminStats"
       :stats="adminStats"
+      :broker-connections="adminBrokerConnections"
+      :enabled-broker-brands="adminEnabledBrands"
       :users="recentUsers"
       :trades="adminTrades"
       :activate-target="activateTarget"
@@ -383,45 +332,16 @@ onMounted(async () => {
       @message="(m) => { message = m.text; messageOk = m.ok }"
     />
 
-    <section class="card wide card-bull">
-      <h2>Broker connection</h2>
-      <p v-if="brokerConnection" class="ok broker-connected">
-        Connected: <strong>{{ brokerConnection.provider }}</strong>
-        <span v-if="brokerConnection.label"> — {{ brokerConnection.label }}</span>
-      </p>
-      <p v-else class="muted">No broker — use quick connect or Telegram <code>/broker connect</code></p>
-      <button
-        v-if="!brokerConnection || brokerConnection.provider !== 'mock'"
-        type="button"
-        class="btn-primary broker-quick"
-        @click="connectMockDemo"
-      >
-        Connect Mock Demo ($10,000)
-      </button>
-      <hr class="divider broker-divider" />
-      <div class="field">
-        <label>Broker</label>
-        <select v-model="provider" @change="onProviderChange">
-          <option v-for="b in brokers" :key="b.id" :value="b.id">{{ b.name }} ({{ b.status }})</option>
-        </select>
-      </div>
-      <div v-for="f in dynamicFields" :key="f.key" class="field">
-        <label>{{ f.label }}</label>
-        <label v-if="f.type === 'boolean'" class="checkbox-row">
-          <input
-            type="checkbox"
-            :checked="credentials[f.key] === 'true'"
-            @change="credentials[f.key] = $event.target.checked ? 'true' : 'false'"
-          />
-          <span>Enabled</span>
-        </label>
-        <input v-else v-model="credentials[f.key]" :type="f.type === 'password' ? 'password' : 'text'" />
-      </div>
-      <div class="broker-actions">
-        <button type="button" class="btn-secondary" :disabled="!brokerIsLive" @click="testBroker">Test</button>
-        <button type="button" class="btn-primary" :disabled="!brokerIsLive" @click="saveBroker">Save</button>
-      </div>
-    </section>
+    <BrokerConnectWizard
+      id="connect"
+      :brands="brands"
+      :brokers="brokers"
+      :connection="brokerConnection"
+      :public-site-url="publicSiteUrl"
+      :metaapi-shared-token="metaapiSharedToken"
+      @saved="refresh"
+      @message="onBrokerWizardMessage"
+    />
     </template>
   </div>
   </main>

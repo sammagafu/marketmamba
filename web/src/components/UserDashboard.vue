@@ -43,6 +43,13 @@ const subscriptionExpires = computed(() => {
   return exp ? new Date(exp).toLocaleDateString() : '—'
 })
 
+const tierInfo = computed(() => props.subscription?.tier || null)
+
+function usagePct(used, max) {
+  if (!max || max <= 0) return 0
+  return Math.min(100, Math.round((used / max) * 100))
+}
+
 const miniAppUrl = computed(() => props.config?.mini_app_url || props.config?.public_site_url || '')
 
 function fmtProfit(t) {
@@ -59,6 +66,10 @@ function fmtTime(iso) {
 
 <template>
   <section class="user-dashboard wide">
+    <p class="warn isolation-hint">
+      Auto-trade uses your connected broker only. Avoid manual trades on the same account while automation is on.
+    </p>
+
     <div class="dash-head">
       <div class="dash-title">
         <h2>Your dashboard</h2>
@@ -91,6 +102,29 @@ function fmtTime(iso) {
         <strong class="stat-value">{{ netClosedPL >= 0 ? '+' : '' }}${{ netClosedPL.toFixed(2) }}</strong>
         <span class="stat-sub muted">{{ closedTrades.length }} closed trades</span>
       </div>
+    </div>
+
+    <div v-if="tierInfo" class="card card-bull tier-usage">
+      <h3>Plan usage ({{ tierInfo.limits?.plan || 'trial' }})</h3>
+      <p class="muted small">Resets monthly (UTC). Period: {{ tierInfo.usage?.period_start || '—' }}</p>
+      <ul class="usage-list">
+        <li>
+          <span>Broker accounts</span>
+          <strong>{{ tierInfo.usage?.broker_accounts ?? 0 }} / {{ tierInfo.limits?.max_broker_accounts ?? '—' }}</strong>
+        </li>
+        <li>
+          <span>Signals received</span>
+          <strong>{{ tierInfo.usage?.signals_received ?? 0 }} / {{ tierInfo.limits?.max_signals_per_period ?? '—' }}</strong>
+        </li>
+        <li>
+          <span>Long trades (BUY)</span>
+          <strong>{{ tierInfo.usage?.long_trades ?? 0 }} / {{ tierInfo.limits?.max_long_trades ?? '—' }}</strong>
+        </li>
+        <li>
+          <span>Short trades (SELL)</span>
+          <strong>{{ tierInfo.usage?.short_trades ?? 0 }} / {{ tierInfo.limits?.max_short_trades ?? '—' }}</strong>
+        </li>
+      </ul>
     </div>
 
     <div class="status-row">
@@ -345,6 +379,24 @@ function fmtTime(iso) {
   margin: 0;
 }
 
+.tier-usage {
+  margin-bottom: 1rem;
+}
+.usage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+.usage-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.usage-list li:last-child {
+  border-bottom: none;
+}
 .dash-section h3 {
   margin: 0 0 0.75rem;
   font-size: 1rem;
