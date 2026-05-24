@@ -11,9 +11,14 @@ import {
   hideMainButton,
 } from './telegramWebApp'
 import BrandLogo from './components/BrandLogo.vue'
-import { VALUE_PROPOSITION, PAYMENT_NOTE } from './brand'
+import { VALUE_PROPOSITION, PAYMENT_NOTE, TAGLINE } from './brand'
+
+const SPLASH_MIN_MS = 750
+const SPLASH_FADE_MS = 380
 
 const loading = ref(true)
+const splashVisible = ref(true)
+const splashFading = ref(false)
 const refreshing = ref(false)
 const error = ref('')
 const trades = ref([])
@@ -248,28 +253,72 @@ function syncMainButton() {
 
 watch([canTrade, pendingOrder, loading], syncMainButton)
 
+function hideSplash() {
+  return new Promise((resolve) => {
+    splashFading.value = true
+    setTimeout(() => {
+      splashVisible.value = false
+      resolve()
+    }, SPLASH_FADE_MS)
+  })
+}
+
+async function dismissSplash(startedAt) {
+  const remain = SPLASH_MIN_MS - (Date.now() - startedAt)
+  if (remain > 0) {
+    await new Promise((r) => setTimeout(r, remain))
+  }
+  await hideSplash()
+}
+
 onMounted(async () => {
+  const splashStartedAt = Date.now()
   if (!isTelegramMiniApp()) {
     loading.value = false
     error.value = 'Open from the Telegram bot menu: Dashboard'
+    await dismissSplash(splashStartedAt)
     return
   }
   initTelegramWebApp()
   try {
     await authMiniApp()
     await Promise.all([loadDashboard(), loadPairs()])
-    syncMainButton()
   } catch (e) {
     error.value = e.message
   } finally {
     loading.value = false
+    await dismissSplash(splashStartedAt)
+    syncMainButton()
   }
 })
 </script>
 
 <template>
   <div class="mini-app">
-    <header class="tg-header">
+    <Transition name="splash">
+      <div
+        v-if="splashVisible"
+        class="tg-splash"
+        :class="{ 'tg-splash--fade': splashFading }"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        aria-label="Loading Market Mamba"
+      >
+        <div class="tg-splash-inner">
+          <BrandLogo variant="portrait" class="splash-logo" />
+          <h1 class="splash-title">Market Mamba</h1>
+          <p class="splash-tagline">{{ TAGLINE }}</p>
+          <div class="splash-loader" aria-hidden="true">
+            <span class="splash-dot" />
+            <span class="splash-dot" />
+            <span class="splash-dot" />
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <header v-show="!splashVisible" class="tg-header">
       <div class="tg-header-main">
         <BrandLogo variant="icon" class="tg-logo" />
         <div>
@@ -294,19 +343,16 @@ onMounted(async () => {
       </div>
     </header>
 
-    <div v-if="loading" class="state-panel">
-      <div class="spinner" aria-hidden="true" />
-      <p class="state-title">Loading account</p>
-      <p class="state-sub">Signed in via Telegram</p>
-    </div>
-
-    <div v-else-if="error && !trades.length && !positions.length" class="state-panel state-error">
+    <div
+      v-if="!splashVisible && error && !trades.length && !positions.length"
+      class="state-panel state-error"
+    >
       <p class="state-title">Could not load</p>
       <p class="state-sub">{{ error }}</p>
       <button type="button" class="btn btn-primary" @click="refresh">Try again</button>
     </div>
 
-    <main v-else class="tg-main">
+    <main v-else-if="!splashVisible" class="tg-main">
       <!-- Quick actions -->
       <div class="quick-row" role="toolbar" aria-label="Quick actions">
         <button
@@ -591,7 +637,7 @@ onMounted(async () => {
       <p v-if="error" class="inline-err">{{ error }}</p>
     </main>
 
-    <footer class="tg-footer">
+    <footer v-show="!splashVisible" class="tg-footer">
       <p>Not a broker · USDT via Binance only</p>
       <p class="tg-footer-sub">Forex trading involves substantial risk.</p>
     </footer>
@@ -1303,5 +1349,110 @@ onMounted(async () => {
 .tg-footer-sub {
   margin-top: 0.25rem !important;
   opacity: 0.85;
+}
+
+.tg-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mm-bg);
+  padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem max(1.5rem, env(safe-area-inset-bottom));
+  opacity: 1;
+  transition: opacity 0.38s ease;
+}
+
+.tg-splash--fade {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-enter-active,
+.splash-leave-active {
+  transition: opacity 0.38s ease;
+}
+
+.splash-enter-from,
+.splash-leave-to {
+  opacity: 0;
+}
+
+.tg-splash-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 280px;
+}
+
+.splash-logo {
+  width: 88px !important;
+  height: 88px !important;
+  margin-bottom: 1.1rem;
+  animation: splash-pulse 2.2s ease-in-out infinite;
+}
+
+.splash-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.splash-tagline {
+  margin: 0 0 1.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--mm-muted);
+}
+
+.splash-loader {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mm-brand);
+  animation: splash-bounce 1s ease-in-out infinite;
+}
+
+.splash-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.splash-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes splash-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.92;
+  }
+}
+
+@keyframes splash-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
 }
 </style>
